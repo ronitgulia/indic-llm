@@ -76,14 +76,21 @@ def clean_instruct_data(input_path: str, output_path: str):
             count_in += 1
             try:
                 sample = json.loads(line)
-                # Instruction data
-                instruction = normalize_unicode(sample.get("instruction", ""))
-                output = normalize_unicode(sample.get("output", ""))
+                messages = sample.get("messages", [])
 
-                if len(instruction) > 5 and len(output) > 5:
+                # User aur assistant messages nikalo
+                user_msg = ""
+                assistant_msg = ""
+                for msg in messages:
+                    if msg.get("role") == "user":
+                        user_msg = normalize_unicode(msg.get("content", ""))
+                    elif msg.get("role") == "assistant":
+                        assistant_msg = normalize_unicode(msg.get("content", ""))
+
+                if len(user_msg) > 5 and len(assistant_msg) > 5:
                     clean_sample = {
-                        "instruction": instruction.strip(),
-                        "output": output.strip()
+                        "instruction": user_msg.strip(),
+                        "output": assistant_msg.strip()
                     }
                     fout.write(json.dumps(clean_sample, ensure_ascii=False) + "\n")
                     count_out += 1
