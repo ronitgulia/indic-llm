@@ -12,3 +12,9 @@ logs/
 wandb/
 .cache/
 checkpoints/
+# Large data files
+data/tokenizer/corpus.txt
+data/tokenizer/*.vocab
+data/tokenizer/*.model
+data/raw/
+data/processed/
