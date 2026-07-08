@@ -1,0 +1,42 @@
+# Indic LLM - Training Configuration
+# =====================================
+# Adjust these values based on your hardware and dataset size.
+# Usage: python src/train.py (reads defaults from TrainConfig)
+
+model:
+  vocab_size: 32000       # must match SentencePiece model
+  dim: 512                # embedding dimension
+  n_layers: 8             # transformer depth
+  n_heads: 8              # attention heads (Q)
+  n_kv_heads: 4           # GQA key-value heads
+  max_seq_len: 512        # context window during training
+  dropout: 0.1
+
+training:
+  batch_size: 8           # per-device batch
+  grad_accumulation_steps: 4   # effective batch = 32
+  max_steps: 10000
+  learning_rate: 3.0e-4
+  min_lr: 3.0e-5          # cosine decay floor
+  warmup_steps: 200
+  weight_decay: 0.1
+  grad_clip: 1.0
+  seed: 42
+  use_amp: true           # mixed precision (set false on CPU)
+
+data:
+  tokenizer_path: "data/tokenizer/indic_spm.model"
+  paths:
+    - "data/processed/sangraha_clean.jsonl"
+    - "data/processed/hindi_parallel_clean.jsonl"
+    - "data/processed/indic_instruct_clean.jsonl"
+
+checkpointing:
+  checkpoint_dir: "checkpoints"
+  save_every: 500         # save every N steps
+  log_every: 50           # log metrics every N steps
+
+# ── Scaling Guide ──────────────────────────────────────────────
+# Small  (~25M):  dim=512,  layers=8,  heads=8,  kv_heads=4
+# Medium (~120M): dim=768,  layers=12, heads=12, kv_heads=6
+# Large  (~350M): dim=1024, layers=24, heads=16, kv_heads=8
