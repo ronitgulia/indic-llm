@@ -1,0 +1,22 @@
+# ── Core ──────────────────────────────────────────────────────────────
+torch>=2.0.0
+sentencepiece>=0.1.99
+
+# ── Data ──────────────────────────────────────────────────────────────
+datasets>=2.14.0       # HuggingFace datasets (for download_datasets.py)
+huggingface-hub>=0.20.0
+
+# ── Config ────────────────────────────────────────────────────────────
+pyyaml>=6.0.1          # YAML config loading (train.py --config)
+
+# ── Logging & Monitoring (optional) ───────────────────────────────────
+wandb>=0.16.0          # Weights & Biases (train.py --use_wandb)
+
+# ── Dev / Lint ────────────────────────────────────────────────────────
+ruff>=0.4.0
+mypy>=1.8.0
+types-PyYAML>=6.0.12
+
+# ── Flash Attention (optional — CUDA only) ────────────────────────────
+# Uncomment if running on a compatible GPU:
+# flash-attn>=2.5.0
