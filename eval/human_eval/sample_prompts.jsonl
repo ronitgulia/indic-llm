@@ -1,0 +1,22 @@
+[
+  {"prompt": "भारत की राजधानी क्या है?", "category": "factual"},
+  {"prompt": "हिंदी साहित्य के प्रमुख कवि कौन हैं?", "category": "factual"},
+  {"prompt": "महात्मा गांधी के बारे में बताओ।", "category": "biographical"},
+  {"prompt": "भारत में मानसून कब आता है?", "category": "factual"},
+  {"prompt": "ताजमहल का इतिहास क्या है?", "category": "historical"},
+  {"prompt": "क्रिकेट खेल के नियम क्या हैं?", "category": "sports"},
+  {"prompt": "भारत के प्रमुख त्योहार कौन से हैं?", "category": "culture"},
+  {"prompt": "हिंदी में एक छोटी कविता लिखो।", "category": "creative"},
+  {"prompt": "रामायण की कहानी संक्षेप में बताओ।", "category": "literature"},
+  {"prompt": "भारतीय संविधान कब लागू हुआ?", "category": "civics"},
+  {"prompt": "अंतरिक्ष अन्वेषण के बारे में बताओ।", "category": "science"},
+  {"prompt": "स्वस्थ जीवन जीने के लिए क्या करना चाहिए?", "category": "health"},
+  {"prompt": "भारत की प्रमुख नदियाँ कौन सी हैं?", "category": "geography"},
+  {"prompt": "आर्टिफिशियल इंटेलिजेंस क्या है? सरल भाषा में समझाओ।", "category": "technology"},
+  {"prompt": "हिंदी भाषा का इतिहास बताओ।", "category": "language"},
+  {"prompt": "भारत और चीन के संबंध कैसे हैं?", "category": "geopolitics"},
+  {"prompt": "योग के क्या फायदे हैं?", "category": "wellness"},
+  {"prompt": "भारतीय शास्त्रीय संगीत के बारे में बताओ।", "category": "arts"},
+  {"prompt": "पर्यावरण प्रदूषण को कैसे कम करें?", "category": "environment"},
+  {"prompt": "एक प्रेरणादायक हिंदी कहानी सुनाओ।", "category": "creative"}
+]
