@@ -1,6 +1,5 @@
 import json
 
-# Dekho instruct data ka structure kaisa hai
 with open("data/raw/indic_instruct_hi.jsonl", "r", encoding="utf-8") as f:
     for i, line in enumerate(f):
         sample = json.loads(line)

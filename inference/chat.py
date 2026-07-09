@@ -11,21 +11,20 @@ Features:
   - CPU & GPU support with automatic device detection
 """
 
+import argparse
+import json
 import os
 import sys
-import json
-import argparse
 import time
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
-import torch
 import sentencepiece as spm
+import torch
 
 # Allow importing from src/
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from model import IndicLLM, ModelConfig
-
 
 # ─────────────────────────────────────────
 #  ANSI colours for terminal UX

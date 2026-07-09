@@ -34,12 +34,11 @@ import argparse
 import hashlib
 import json
 import logging
-import os
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple
 
 # ---------------------------------------------------------------------------
 # Logging

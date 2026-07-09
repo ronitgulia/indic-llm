@@ -11,11 +11,12 @@ Llama-style decoder-only transformer with:
 """
 
 import math
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 # Try to import Flash Attention — gracefully fall back to vanilla SDPA
 try:

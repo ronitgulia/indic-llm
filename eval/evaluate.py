@@ -22,15 +22,16 @@ import json
 import logging
 import math
 import re
+import sys
 import time
 from collections import Counter
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import sentencepiece as spm
 import torch
 from torch.utils.data import DataLoader, Dataset
-import sentencepiece as spm
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -47,11 +48,9 @@ log = logging.getLogger(__name__)
 # Import model (handle running from different CWDs)
 # ---------------------------------------------------------------------------
 
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from model import IndicLLM, ModelConfig  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Utility: load a checkpoint
