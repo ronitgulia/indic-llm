@@ -398,9 +398,6 @@ class IndicLLM(nn.Module):
         self.norm = RMSNorm(config.dim)
         self.output = nn.Linear(config.dim, config.vocab_size, bias=False)
 
-        # Weight tying: embedding and output share weights (saves ~20M params)
-        self.output.weight = self.tok_embeddings.weight
-
         # Pre-compute RoPE frequencies once
         self.register_buffer(
             "freqs_cis",
@@ -412,7 +409,17 @@ class IndicLLM(nn.Module):
             ),
         )
 
+        # BUG FIX: initialise weights BEFORE tying so that _init_weights()
+        # only sees distinct tensors.  Previously the tie was set first, causing
+        # the shared tensor to be initialised twice (once as Linear with the
+        # depth-scaled std, then again as Embedding with std=0.02), silently
+        # discarding the depth-scaled init for the output projection.
         self._init_weights()
+
+        # Weight tying: embedding and output share weights (saves ~20M params).
+        # Done AFTER _init_weights() so the embedding initialisation wins and
+        # the output projection pointer is updated cleanly.
+        self.output.weight = self.tok_embeddings.weight
 
     def _init_weights(self) -> None:
         """

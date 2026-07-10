@@ -189,7 +189,8 @@ class IndicTextDataset(Dataset):
                     except Exception:
                         continue
 
-        random.shuffle(self.samples)
+        rng = random.Random(42)  # fixed seed → reproducible dataset order
+        rng.shuffle(self.samples)
         if max_samples:
             self.samples = self.samples[:max_samples]
 
@@ -368,7 +369,10 @@ class Trainer:
 
         val_size = max(1, int(len(full_dataset) * cfg.val_fraction))
         train_size = len(full_dataset) - val_size
-        train_ds, val_ds = random_split(full_dataset, [train_size, val_size])
+        # Use a seeded Generator so the train/val split is identical across
+        # every run and resume — prevents data leakage between splits.
+        split_gen = torch.Generator().manual_seed(cfg.seed)
+        train_ds, val_ds = random_split(full_dataset, [train_size, val_size], generator=split_gen)
 
         self.train_loader = DataLoader(
             train_ds, batch_size=cfg.batch_size, shuffle=True,
@@ -589,28 +593,31 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--config", type=str, default=None,
                         help="Path to YAML config file (overrides CLI defaults)")
-    parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--max_steps", type=int, default=10000)
-    parser.add_argument("--learning_rate", type=float, default=3e-4)
-    parser.add_argument("--max_seq_len", type=int, default=512)
-    parser.add_argument("--grad_accumulation_steps", type=int, default=4)
-    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints")
-    parser.add_argument("--keep_best_n", type=int, default=3,
+    # BUG FIX: all overridable args use default=None so that YAML values are
+    # preserved when the user hasn't explicitly passed a flag.  Only non-None
+    # values are applied to cfg after YAML loading (see __main__ below).
+    parser.add_argument("--batch_size", type=int, default=None)
+    parser.add_argument("--max_steps", type=int, default=None)
+    parser.add_argument("--learning_rate", type=float, default=None)
+    parser.add_argument("--max_seq_len", type=int, default=None)
+    parser.add_argument("--grad_accumulation_steps", type=int, default=None)
+    parser.add_argument("--checkpoint_dir", type=str, default=None)
+    parser.add_argument("--keep_best_n", type=int, default=None,
                         help="Number of best checkpoints to retain")
     parser.add_argument("--resume_from", type=str, default=None,
                         help="Path to a .pt checkpoint to resume from")
-    parser.add_argument("--device", type=str, default="auto",
-                        choices=["auto", "cuda", "cpu", "mps"])
+    parser.add_argument("--device", type=str, default=None,
+                        choices=["auto", "cuda", "cpu", "mps", None])
     parser.add_argument("--no_amp", action="store_true",
                         help="Disable automatic mixed precision")
     parser.add_argument("--use_wandb", action="store_true",
                         help="Log metrics to Weights & Biases")
-    parser.add_argument("--wandb_project", type=str, default="indic-llm")
-    parser.add_argument("--experiment_name", type=str, default="default",
+    parser.add_argument("--wandb_project", type=str, default=None)
+    parser.add_argument("--experiment_name", type=str, default=None,
                         help="Run name for checkpointing and W&B")
-    parser.add_argument("--val_fraction", type=float, default=0.005,
+    parser.add_argument("--val_fraction", type=float, default=None,
                         help="Fraction of data to hold out for validation")
-    parser.add_argument("--eval_every", type=int, default=500,
+    parser.add_argument("--eval_every", type=int, default=None,
                         help="Evaluate validation loss every N steps")
     return parser.parse_args()
 
@@ -618,28 +625,45 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
 
-    # Load YAML config first (if provided), then override with CLI flags
+    # Load YAML config first (base), then only apply CLI flags that were
+    # explicitly provided by the user (i.e., not still None / store_true default).
     if args.config:
         cfg = TrainConfig.from_yaml(args.config)
         log.info("Config loaded from: %s", args.config)
     else:
         cfg = TrainConfig()
 
-    # CLI flags take priority over YAML
-    cfg.batch_size = args.batch_size
-    cfg.max_steps = args.max_steps
-    cfg.learning_rate = args.learning_rate
-    cfg.max_seq_len = args.max_seq_len
-    cfg.grad_accumulation_steps = args.grad_accumulation_steps
-    cfg.checkpoint_dir = args.checkpoint_dir
-    cfg.keep_best_n = args.keep_best_n
-    cfg.device = args.device
-    cfg.use_amp = not args.no_amp
-    cfg.use_wandb = args.use_wandb
-    cfg.wandb_project = args.wandb_project
-    cfg.experiment_name = args.experiment_name
-    cfg.val_fraction = args.val_fraction
-    cfg.eval_every = args.eval_every
+    # BUG FIX: only overwrite a field when the user explicitly passed that flag.
+    # Previously every field was unconditionally overwritten by argparse defaults,
+    # which completely silenced any value coming from the YAML file.
+    if args.batch_size is not None:
+        cfg.batch_size = args.batch_size
+    if args.max_steps is not None:
+        cfg.max_steps = args.max_steps
+    if args.learning_rate is not None:
+        cfg.learning_rate = args.learning_rate
+    if args.max_seq_len is not None:
+        cfg.max_seq_len = args.max_seq_len
+    if args.grad_accumulation_steps is not None:
+        cfg.grad_accumulation_steps = args.grad_accumulation_steps
+    if args.checkpoint_dir is not None:
+        cfg.checkpoint_dir = args.checkpoint_dir
+    if args.keep_best_n is not None:
+        cfg.keep_best_n = args.keep_best_n
+    if args.device is not None:
+        cfg.device = args.device
+    if args.no_amp:                        # store_true: only True when explicitly passed
+        cfg.use_amp = False
+    if args.use_wandb:                     # store_true: only True when explicitly passed
+        cfg.use_wandb = True
+    if args.wandb_project is not None:
+        cfg.wandb_project = args.wandb_project
+    if args.experiment_name is not None:
+        cfg.experiment_name = args.experiment_name
+    if args.val_fraction is not None:
+        cfg.val_fraction = args.val_fraction
+    if args.eval_every is not None:
+        cfg.eval_every = args.eval_every
 
     trainer = Trainer(cfg, resume_from=args.resume_from)
     trainer.train()
