@@ -41,7 +41,10 @@ try:
 except ImportError:
     _WANDB_AVAILABLE = False
 
-from model import IndicLLM, ModelConfig
+try:
+    from model import IndicLLM, ModelConfig
+except ImportError:
+    from src.model import IndicLLM, ModelConfig  # type: ignore[no-redef]
 
 # ─────────────────────────────────────────
 # Logging setup

@@ -12,10 +12,11 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Code Style
+## Code Style & Testing
 
-- **Formatter**: `ruff format src/ eval/ inference/`
-- **Linter**: `ruff check src/ eval/ inference/`
+- **Formatter**: `ruff format src/ eval/ inference/ tests/`
+- **Linter**: `ruff check src/ eval/ inference/ tests/`
+- **Test suite**: `pytest tests/ -v`
 - **Type checks**: `mypy src/model.py src/tokenizer.py`
 
 All checks run automatically via the CI workflow on every PR.
@@ -49,9 +50,10 @@ Examples:
 ## Pull Request Checklist
 
 - [ ] Code passes `ruff check` with no errors
+- [ ] Unit tests pass via `pytest tests/ -v`
 - [ ] New public functions have docstrings
 - [ ] Changes are described in the PR description
-- [ ] CI smoke test passes
+- [ ] CI smoke test and unit test suite pass
 
 ## Reporting Issues
 

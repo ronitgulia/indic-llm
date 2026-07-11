@@ -52,8 +52,9 @@ log = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from model import IndicLLM, ModelConfig  # noqa: E402
 from benchmarks import compute_bleu, compute_chrf, token_accuracy  # noqa: E402
+
+from model import IndicLLM, ModelConfig  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Utility: load a checkpoint

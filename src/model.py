@@ -295,6 +295,8 @@ class GroupedQueryAttention(nn.Module):
         # KV-cache update during inference
         if self.kv_cache is not None:
             xk, xv = self.kv_cache.update(xk, xv, start_pos)
+            xk = xk.to(x.dtype)
+            xv = xv.to(x.dtype)
 
         if self.use_flash:
             # Flash Attention 2 supports GQA natively, no need to repeat KV heads
@@ -483,7 +485,7 @@ class IndicLLM(nn.Module):
     def init_kv_cache(
         self,
         max_batch_size: int = 1,
-        dtype: torch.dtype = torch.float16,
+        dtype: Optional[torch.dtype] = None,
     ) -> None:
         """
         Allocate KV-caches for all attention layers.
@@ -492,9 +494,12 @@ class IndicLLM(nn.Module):
         Parameters
         ----------
         max_batch_size : Maximum generation batch size.
-        dtype          : Storage dtype (float16 or bfloat16 recommended).
+        dtype          : Storage dtype (defaults to model parameter dtype).
         """
-        device = next(self.parameters()).device
+        first_param = next(self.parameters())
+        device = first_param.device
+        if dtype is None:
+            dtype = first_param.dtype
         for layer in self.layers:
             layer.attn.init_kv_cache(
                 max_batch_size=max_batch_size,
