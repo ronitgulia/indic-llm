@@ -518,13 +518,15 @@ class IndicLLM(nn.Module):
         tokens: torch.Tensor,
         targets: Optional[torch.Tensor] = None,
         start_pos: int = 0,
+        ignore_index: Optional[int] = None,
     ):
         """
         Parameters
         ----------
-        tokens    : (B, T) input token ids.
-        targets   : (B, T) target token ids for loss computation (optional).
-        start_pos : Starting position for KV-cache (0 during training).
+        tokens       : (B, T) input token ids.
+        targets      : (B, T) target token ids for loss computation (optional).
+        start_pos    : Starting position for KV-cache (0 during training).
+        ignore_index : Label index to ignore in cross-entropy loss (defaults to pad_id).
 
         Returns
         -------
@@ -551,10 +553,11 @@ class IndicLLM(nn.Module):
 
         loss = None
         if targets is not None:
+            pad_idx = self.config.pad_id if ignore_index is None else ignore_index
             loss = F.cross_entropy(
                 logits.view(-1, self.config.vocab_size),
                 targets.view(-1),
-                ignore_index=self.config.pad_id,
+                ignore_index=pad_idx,
                 label_smoothing=self.config.label_smoothing,
             )
 

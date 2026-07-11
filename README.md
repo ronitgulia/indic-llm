@@ -41,7 +41,8 @@ A research-grade, end-to-end training framework for **decoder-only language mode
 indic-llm/
 ├── src/
 │   ├── model.py          # Transformer architecture (GQA, RoPE, SwiGLU, KV-cache)
-│   ├── train.py          # Training loop (AdamW, cosine LR, AMP, W&B, val loss)
+│   ├── train.py          # Pre-training loop (AdamW, cosine LR, AMP, W&B, val loss)
+│   ├── sft.py            # Supervised fine-tuning with prompt loss masking
 │   ├── tokenizer.py      # IndicTokenizer class wrapping SentencePiece BPE
 │   └── preprocess.py     # Text cleaning pipeline (dedup, quality filter, schemas)
 ├── data/
@@ -54,7 +55,8 @@ indic-llm/
 ├── inference/
 │   └── chat.py                # Interactive chat CLI + batch inference
 ├── configs/
-│   └── train_config.yaml      # All hyperparameters with scaling guide
+│   ├── train_config.yaml      # Pre-training hyperparameters with scaling guide
+│   └── sft_config.yaml        # Instruction fine-tuning hyperparameters
 ├── .github/workflows/
 │   └── ci.yml                 # Lint (ruff) + type-check (mypy) + smoke test
 ├── requirements.txt
@@ -134,6 +136,16 @@ python src/train.py \
 **Resume from checkpoint:**
 ```bash
 python src/train.py --resume_from checkpoints/step_005000.pt
+```
+
+### 5b — Supervised Fine-Tuning (SFT)
+
+Fine-tune a pre-trained base checkpoint on instruction datasets with target-only loss masking:
+
+```bash
+python src/sft.py \
+    --config configs/sft_config.yaml \
+    --base_checkpoint checkpoints/step_010000.pt
 ```
 
 ### 6 — Evaluate

@@ -1,0 +1,38 @@
+# Indic LLM - Supervised Fine-Tuning (SFT) Configuration
+# ========================================================
+# Hyperparameters for instruction tuning pre-trained checkpoints.
+# Usage: python src/sft.py --config configs/sft_config.yaml
+
+model:
+  vocab_size: 32000       # must match SentencePiece model
+  dim: 512
+  n_layers: 8
+  n_heads: 8
+  n_kv_heads: 4
+  max_seq_len: 512
+  dropout: 0.05
+  sliding_window: null
+
+sft:
+  base_checkpoint: "checkpoints/step_010000.pt"  # path to pretrained base weights
+  output_dir: "checkpoints/sft"
+  batch_size: 4
+  grad_accumulation_steps: 8                     # effective batch size = 32
+  max_steps: 2000
+  learning_rate: 5.0e-5                          # conservative learning rate for fine-tuning
+  min_lr: 5.0e-6                                 # 10% of base lr
+  warmup_steps: 50
+  weight_decay: 0.01
+  grad_clip: 1.0
+  eval_every: 100
+  save_every: 250
+  keep_best_n: 3
+  log_every: 20
+  val_fraction: 0.05
+  seed: 42
+  use_amp: true
+
+data:
+  tokenizer_path: "data/tokenizer/indic_spm.model"
+  data_path: "data/processed/indic_instruct_clean.jsonl"
+  system_prompt: null                            # optional system prompt prepended to inputs
