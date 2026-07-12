@@ -543,6 +543,7 @@ class IndicLLM(nn.Module):
         top_k: int = 50,
         eos_id: Optional[int] = None,
         use_kv_cache: bool = True,
+        repetition_penalty: float = 1.0,
     ) -> torch.Tensor:
         """
         Autoregressive generation with temperature + top-p + top-k sampling.
@@ -591,6 +592,15 @@ class IndicLLM(nn.Module):
                 logits, _ = self(ctx, start_pos=0)
 
             next_logits = logits[:, -1, :] / max(temperature, 1e-8)
+
+            # Repetition penalty
+            if repetition_penalty != 1.0:
+                for b in range(tokens.shape[0]):
+                    for token_id in set(tokens[b].tolist()):
+                        if next_logits[b, token_id] < 0:
+                            next_logits[b, token_id] *= repetition_penalty
+                        else:
+                            next_logits[b, token_id] /= repetition_penalty
 
             # Top-k filtering
             if top_k > 0:
