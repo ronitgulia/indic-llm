@@ -30,12 +30,14 @@ from torch.utils.data import DataLoader, Dataset, random_split
 
 try:
     import yaml
+
     _YAML_AVAILABLE = True
 except ImportError:
     _YAML_AVAILABLE = False
 
 try:
     import wandb
+
     _WANDB_AVAILABLE = True
 except ImportError:
     _WANDB_AVAILABLE = False
@@ -58,17 +60,20 @@ log = logging.getLogger(__name__)
 #  Training Config
 # ─────────────────────────────────────────
 
+
 @dataclass
 class TrainConfig:
     # ── Data ───────────────────────────────────────────────────────────
-    data_paths: List[str] = field(default_factory=lambda: [
-        "data/processed/sangraha_clean.jsonl",
-        "data/processed/hindi_parallel_clean.jsonl",
-        "data/processed/indic_instruct_clean.jsonl",
-    ])
+    data_paths: List[str] = field(
+        default_factory=lambda: [
+            "data/processed/sangraha_clean.jsonl",
+            "data/processed/hindi_parallel_clean.jsonl",
+            "data/processed/indic_instruct_clean.jsonl",
+        ]
+    )
     tokenizer_path: str = "data/tokenizer/indic_spm.model"
     max_seq_len: int = 512
-    val_fraction: float = 0.005     # fraction of data held out for validation
+    val_fraction: float = 0.005  # fraction of data held out for validation
 
     # ── Model ──────────────────────────────────────────────────────────
     model_dim: int = 512
@@ -78,10 +83,11 @@ class TrainConfig:
     vocab_size: int = 32000
     use_flash_attn: bool = False
     rope_scaling_factor: float = 1.0
+    sliding_window: Optional[int] = None
 
     # ── Optimisation ───────────────────────────────────────────────────
     batch_size: int = 8
-    grad_accumulation_steps: int = 4        # effective batch = 32
+    grad_accumulation_steps: int = 4  # effective batch = 32
     learning_rate: float = 3e-4
     min_lr: float = 3e-5
     warmup_steps: int = 200
@@ -92,14 +98,14 @@ class TrainConfig:
 
     # ── Checkpointing ──────────────────────────────────────────────────
     checkpoint_dir: str = "checkpoints"
-    save_every: int = 500                   # steps
-    keep_best_n: int = 3                    # keep only the N best checkpoints
+    save_every: int = 500  # steps
+    keep_best_n: int = 3  # keep only the N best checkpoints
     log_every: int = 50
-    eval_every: int = 500                   # run validation every N steps
+    eval_every: int = 500  # run validation every N steps
 
     # ── Hardware ───────────────────────────────────────────────────────
     device: str = "auto"
-    use_amp: bool = True                    # mixed precision
+    use_amp: bool = True  # mixed precision
     seed: int = 42
     num_workers: int = 0
 
@@ -127,7 +133,9 @@ class TrainConfig:
     def from_yaml(cls, path: str) -> "TrainConfig":
         """Load a TrainConfig from a YAML file, merging with dataclass defaults."""
         if not _YAML_AVAILABLE:
-            raise ImportError("PyYAML is required to load YAML configs: pip install pyyaml")
+            raise ImportError(
+                "PyYAML is required to load YAML configs: pip install pyyaml"
+            )
         with open(path, "r", encoding="utf-8") as f:
             raw = yaml.safe_load(f)
 
@@ -145,6 +153,7 @@ class TrainConfig:
             "save_every": "save_every",
             "log_every": "log_every",
             "use_wandb": "use_wandb",
+            "sliding_window": "sliding_window",
         }
         mapped = {key_map.get(k, k): v for k, v in flat.items()}
 
@@ -156,6 +165,7 @@ class TrainConfig:
 # ─────────────────────────────────────────
 #  Dataset
 # ─────────────────────────────────────────
+
 
 class IndicTextDataset(Dataset):
     """
@@ -204,7 +214,9 @@ class IndicTextDataset(Dataset):
             hi, en = obj["hi"], obj.get("en", "")
             return f"{hi} {en}".strip() if en else hi
         elif "instruction" in obj:
-            return f"[INST] {obj.get('instruction', '')} [/INST] {obj.get('output', '')}"
+            return (
+                f"[INST] {obj.get('instruction', '')} [/INST] {obj.get('output', '')}"
+            )
         return None
 
     def __len__(self) -> int:
@@ -214,19 +226,20 @@ class IndicTextDataset(Dataset):
         text = self.samples[idx]
         ids = self.tokenizer.encode(text, out_type=int)
         ids = ids[: self.max_seq_len + 1]
-        ids += [0] * (self.max_seq_len + 1 - len(ids))   # pad_id = 0
+        ids += [0] * (self.max_seq_len + 1 - len(ids))  # pad_id = 0
         return torch.tensor(ids, dtype=torch.long)
 
 
 def collate_fn(batch: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
     """Stack samples; return (inputs, targets) with causal one-position shift."""
-    tokens = torch.stack(batch)       # (B, T+1)
+    tokens = torch.stack(batch)  # (B, T+1)
     return tokens[:, :-1], tokens[:, 1:]
 
 
 # ─────────────────────────────────────────
 #  LR Scheduler — cosine with warmup
 # ─────────────────────────────────────────
+
 
 def get_lr(step: int, cfg: TrainConfig) -> float:
     """Cosine decay with linear warmup."""
@@ -240,6 +253,7 @@ def get_lr(step: int, cfg: TrainConfig) -> float:
 # ─────────────────────────────────────────
 #  Checkpoint utilities
 # ─────────────────────────────────────────
+
 
 def save_checkpoint(
     model: IndicLLM,
@@ -273,11 +287,11 @@ def save_checkpoint(
         json.dump({"step": step, "val_loss": val_loss, "path": ckpt_path}, mf, indent=2)
 
     best_checkpoints.append((val_loss, ckpt_path))
-    best_checkpoints.sort(key=lambda x: x[0])          # sort ascending by loss
+    best_checkpoints.sort(key=lambda x: x[0])  # sort ascending by loss
 
     # Prune checkpoints beyond keep_best_n
     while len(best_checkpoints) > cfg.keep_best_n:
-        _, old_path = best_checkpoints.pop()             # remove worst
+        _, old_path = best_checkpoints.pop()  # remove worst
         for ext in (".pt", "_meta.json"):
             try:
                 os.remove(old_path.replace(".pt", ext))
@@ -309,6 +323,7 @@ def load_checkpoint(
 # ─────────────────────────────────────────
 #  Validation
 # ─────────────────────────────────────────
+
 
 @torch.no_grad()
 def evaluate(
@@ -346,6 +361,7 @@ def evaluate(
 #  Trainer
 # ─────────────────────────────────────────
 
+
 class Trainer:
     def __init__(self, cfg: TrainConfig, resume_from: Optional[str] = None):
         self.cfg = cfg
@@ -372,15 +388,24 @@ class Trainer:
         # Use a seeded Generator so the train/val split is identical across
         # every run and resume — prevents data leakage between splits.
         split_gen = torch.Generator().manual_seed(cfg.seed)
-        train_ds, val_ds = random_split(full_dataset, [train_size, val_size], generator=split_gen)
+        train_ds, val_ds = random_split(
+            full_dataset, [train_size, val_size], generator=split_gen
+        )
 
         self.train_loader = DataLoader(
-            train_ds, batch_size=cfg.batch_size, shuffle=True,
-            num_workers=cfg.num_workers, collate_fn=collate_fn, drop_last=True,
+            train_ds,
+            batch_size=cfg.batch_size,
+            shuffle=True,
+            num_workers=cfg.num_workers,
+            collate_fn=collate_fn,
+            drop_last=True,
         )
         self.val_loader = DataLoader(
-            val_ds, batch_size=cfg.batch_size, shuffle=False,
-            num_workers=cfg.num_workers, collate_fn=collate_fn,
+            val_ds,
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            collate_fn=collate_fn,
         )
         self._train_iter: Iterator = iter(self.train_loader)
 
@@ -395,6 +420,7 @@ class Trainer:
             dropout=cfg.dropout,
             use_flash_attn=cfg.use_flash_attn,
             rope_scaling_factor=cfg.rope_scaling_factor,
+            sliding_window=cfg.sliding_window,
         )
         self.model = IndicLLM(model_cfg).to(self.device)
         log.info("Model parameters: %.2fM", self.model.num_parameters() / 1e6)
@@ -402,10 +428,16 @@ class Trainer:
 
         # ── Optimiser ──────────────────────────────────────────────────
         # Separate weight-decay groups: don't decay norms, embeddings, biases
-        decay = [p for n, p in self.model.named_parameters()
-                 if p.requires_grad and p.dim() >= 2]
-        no_decay = [p for n, p in self.model.named_parameters()
-                    if p.requires_grad and p.dim() < 2]
+        decay = [
+            p
+            for n, p in self.model.named_parameters()
+            if p.requires_grad and p.dim() >= 2
+        ]
+        no_decay = [
+            p
+            for n, p in self.model.named_parameters()
+            if p.requires_grad and p.dim() < 2
+        ]
         self.optimizer = torch.optim.AdamW(
             [
                 {"params": decay, "weight_decay": cfg.weight_decay},
@@ -432,7 +464,9 @@ class Trainer:
         self._wandb_run = None
         if cfg.use_wandb:
             if not _WANDB_AVAILABLE:
-                log.warning("wandb not installed — skipping W&B logging (pip install wandb)")
+                log.warning(
+                    "wandb not installed — skipping W&B logging (pip install wandb)"
+                )
             else:
                 self._wandb_run = wandb.init(
                     project=cfg.wandb_project,
@@ -470,9 +504,15 @@ class Trainer:
         log.info("\n%s", "=" * 60)
         log.info("  Indic LLM Training")
         log.info("  Steps:          %d", cfg.max_steps)
-        log.info("  Effective batch: %d (%d × %d acc)", cfg.effective_batch_size,
-                 cfg.batch_size, cfg.grad_accumulation_steps)
-        log.info("  Learning rate:  %.2e → %.2e (cosine)", cfg.learning_rate, cfg.min_lr)
+        log.info(
+            "  Effective batch: %d (%d × %d acc)",
+            cfg.effective_batch_size,
+            cfg.batch_size,
+            cfg.grad_accumulation_steps,
+        )
+        log.info(
+            "  Learning rate:  %.2e → %.2e (cosine)", cfg.learning_rate, cfg.min_lr
+        )
         log.info("  Seq length:     %d", cfg.max_seq_len)
         log.info("  Device:         %s", self.device)
         log.info("%s\n", "=" * 60)
@@ -529,19 +569,26 @@ class Trainer:
                 log.info(
                     "step %6d/%d | loss %.4f | ppl %7.2f | lr %.2e | "
                     "gnorm %.3f | tok/s %8,.0f",
-                    step + 1, cfg.max_steps, avg_loss, perplexity,
-                    lr, grad_norm, tok_per_sec,
+                    step + 1,
+                    cfg.max_steps,
+                    avg_loss,
+                    perplexity,
+                    lr,
+                    grad_norm,
+                    tok_per_sec,
                 )
 
                 if self._wandb_run is not None:
-                    self._wandb_run.log({
-                        "train/loss": avg_loss,
-                        "train/perplexity": perplexity,
-                        "train/lr": lr,
-                        "train/grad_norm": grad_norm,
-                        "train/tokens_per_sec": tok_per_sec,
-                        "step": step + 1,
-                    })
+                    self._wandb_run.log(
+                        {
+                            "train/loss": avg_loss,
+                            "train/perplexity": perplexity,
+                            "train/lr": lr,
+                            "train/grad_norm": grad_norm,
+                            "train/tokens_per_sec": tok_per_sec,
+                            "step": step + 1,
+                        }
+                    )
 
                 running_loss = 0.0
 
@@ -550,15 +597,19 @@ class Trainer:
                 val_loss, val_ppl = evaluate(model, self.val_loader, self.device)
                 log.info(
                     "  ── val │ loss %.4f │ ppl %.2f │ best %.4f",
-                    val_loss, val_ppl, best_val_loss,
+                    val_loss,
+                    val_ppl,
+                    best_val_loss,
                 )
 
                 if self._wandb_run is not None:
-                    self._wandb_run.log({
-                        "val/loss": val_loss,
-                        "val/perplexity": val_ppl,
-                        "step": step + 1,
-                    })
+                    self._wandb_run.log(
+                        {
+                            "val/loss": val_loss,
+                            "val/perplexity": val_ppl,
+                            "step": step + 1,
+                        }
+                    )
 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
@@ -586,13 +637,18 @@ class Trainer:
 #  CLI
 # ─────────────────────────────────────────
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Indic LLM — training script",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--config", type=str, default=None,
-                        help="Path to YAML config file (overrides CLI defaults)")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to YAML config file (overrides CLI defaults)",
+    )
     # BUG FIX: all overridable args use default=None so that YAML values are
     # preserved when the user hasn't explicitly passed a flag.  Only non-None
     # values are applied to cfg after YAML loading (see __main__ below).
@@ -600,25 +656,54 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_steps", type=int, default=None)
     parser.add_argument("--learning_rate", type=float, default=None)
     parser.add_argument("--max_seq_len", type=int, default=None)
+    parser.add_argument(
+        "--sliding_window",
+        type=int,
+        default=None,
+        help="Sliding window size for attention (None for full attention)",
+    )
     parser.add_argument("--grad_accumulation_steps", type=int, default=None)
     parser.add_argument("--checkpoint_dir", type=str, default=None)
-    parser.add_argument("--keep_best_n", type=int, default=None,
-                        help="Number of best checkpoints to retain")
-    parser.add_argument("--resume_from", type=str, default=None,
-                        help="Path to a .pt checkpoint to resume from")
-    parser.add_argument("--device", type=str, default=None,
-                        choices=["auto", "cuda", "cpu", "mps", None])
-    parser.add_argument("--no_amp", action="store_true",
-                        help="Disable automatic mixed precision")
-    parser.add_argument("--use_wandb", action="store_true",
-                        help="Log metrics to Weights & Biases")
+    parser.add_argument(
+        "--keep_best_n",
+        type=int,
+        default=None,
+        help="Number of best checkpoints to retain",
+    )
+    parser.add_argument(
+        "--resume_from",
+        type=str,
+        default=None,
+        help="Path to a .pt checkpoint to resume from",
+    )
+    parser.add_argument(
+        "--device", type=str, default=None, choices=["auto", "cuda", "cpu", "mps", None]
+    )
+    parser.add_argument(
+        "--no_amp", action="store_true", help="Disable automatic mixed precision"
+    )
+    parser.add_argument(
+        "--use_wandb", action="store_true", help="Log metrics to Weights & Biases"
+    )
     parser.add_argument("--wandb_project", type=str, default=None)
-    parser.add_argument("--experiment_name", type=str, default=None,
-                        help="Run name for checkpointing and W&B")
-    parser.add_argument("--val_fraction", type=float, default=None,
-                        help="Fraction of data to hold out for validation")
-    parser.add_argument("--eval_every", type=int, default=None,
-                        help="Evaluate validation loss every N steps")
+    parser.add_argument(
+        "--experiment_name",
+        type=str,
+        default=None,
+        help="Run name for checkpointing and W&B",
+    )
+    parser.add_argument(
+        "--val_fraction",
+        type=float,
+        default=None,
+        help="Fraction of data to hold out for validation",
+    )
+    parser.add_argument(
+        "--eval_every",
+        type=int,
+        default=None,
+        help="Evaluate validation loss every N steps",
+    )
     return parser.parse_args()
 
 
@@ -644,6 +729,8 @@ if __name__ == "__main__":
         cfg.learning_rate = args.learning_rate
     if args.max_seq_len is not None:
         cfg.max_seq_len = args.max_seq_len
+    if args.sliding_window is not None:
+        cfg.sliding_window = args.sliding_window
     if args.grad_accumulation_steps is not None:
         cfg.grad_accumulation_steps = args.grad_accumulation_steps
     if args.checkpoint_dir is not None:
@@ -652,9 +739,9 @@ if __name__ == "__main__":
         cfg.keep_best_n = args.keep_best_n
     if args.device is not None:
         cfg.device = args.device
-    if args.no_amp:                        # store_true: only True when explicitly passed
+    if args.no_amp:  # store_true: only True when explicitly passed
         cfg.use_amp = False
-    if args.use_wandb:                     # store_true: only True when explicitly passed
+    if args.use_wandb:  # store_true: only True when explicitly passed
         cfg.use_wandb = True
     if args.wandb_project is not None:
         cfg.wandb_project = args.wandb_project
