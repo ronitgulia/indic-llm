@@ -21,6 +21,7 @@ import torch.nn.functional as F
 # Try to import Flash Attention — gracefully fall back to vanilla SDPA
 try:
     from flash_attn import flash_attn_func  # type: ignore[import]
+
     _FLASH_AVAILABLE = True
 except ImportError:
     _FLASH_AVAILABLE = False
@@ -30,13 +31,14 @@ except ImportError:
 #  Config
 # ─────────────────────────────────────────
 
+
 @dataclass
 class ModelConfig:
-    vocab_size: int = 32000         # SentencePiece vocab
-    dim: int = 512                  # embedding dimension
-    n_layers: int = 8               # transformer layers
-    n_heads: int = 8                # attention heads (Q)
-    n_kv_heads: int = 4             # GQA key-value heads
+    vocab_size: int = 32000  # SentencePiece vocab
+    dim: int = 512  # embedding dimension
+    n_layers: int = 8  # transformer layers
+    n_heads: int = 8  # attention heads (Q)
+    n_kv_heads: int = 4  # GQA key-value heads
     ffn_dim_multiplier: float = 2.67  # FFN hidden = dim * multiplier
     max_seq_len: int = 2048
     dropout: float = 0.1
@@ -45,6 +47,9 @@ class ModelConfig:
 
     # Flash Attention 2 (requires the flash-attn package)
     use_flash_attn: bool = False
+
+    # Sliding window attention (restricts causal mask to local window)
+    sliding_window: Optional[int] = None
 
     # RoPE NTK-aware scaling for long-context generalisation
     # Set rope_scaling_factor > 1.0 to extend effective context length
@@ -65,6 +70,7 @@ class ModelConfig:
 #  RMSNorm
 # ─────────────────────────────────────────
 
+
 class RMSNorm(nn.Module):
     """Root Mean Square Layer Normalization — faster than LayerNorm."""
 
@@ -83,6 +89,7 @@ class RMSNorm(nn.Module):
 # ─────────────────────────────────────────
 #  Rotary Positional Embeddings (RoPE)
 # ─────────────────────────────────────────
+
 
 def precompute_freqs_cis(
     dim: int,
@@ -123,7 +130,7 @@ def apply_rotary_emb(
     xk_c = torch.view_as_complex(xk_r)
 
     # freqs_cis: (T, head_dim/2) → broadcast over batch and heads
-    freqs_cis = freqs_cis[:xq.shape[1]].unsqueeze(0).unsqueeze(2)
+    freqs_cis = freqs_cis[: xq.shape[1]].unsqueeze(0).unsqueeze(2)
 
     xq_out = torch.view_as_real(xq_c * freqs_cis).flatten(3)
     xk_out = torch.view_as_real(xk_c * freqs_cis).flatten(3)
@@ -134,6 +141,7 @@ def apply_rotary_emb(
 # ─────────────────────────────────────────
 #  KV Cache
 # ─────────────────────────────────────────
+
 
 class KVCache(nn.Module):
     """
@@ -187,12 +195,12 @@ class KVCache(nn.Module):
         (k_full, v_full) accumulated up to start_pos + T_new.
         """
         T_new = k.shape[1]
-        self.k_cache[:k.shape[0], start_pos: start_pos + T_new] = k
-        self.v_cache[:v.shape[0], start_pos: start_pos + T_new] = v
+        self.k_cache[: k.shape[0], start_pos : start_pos + T_new] = k
+        self.v_cache[: v.shape[0], start_pos : start_pos + T_new] = v
         self.seq_len = start_pos + T_new
 
-        k_full = self.k_cache[:k.shape[0], :self.seq_len]
-        v_full = self.v_cache[:v.shape[0], :self.seq_len]
+        k_full = self.k_cache[: k.shape[0], : self.seq_len]
+        v_full = self.v_cache[: v.shape[0], : self.seq_len]
         return k_full, v_full
 
     def reset(self) -> None:
@@ -205,6 +213,7 @@ class KVCache(nn.Module):
 # ─────────────────────────────────────────
 #  Grouped Query Attention (GQA)
 # ─────────────────────────────────────────
+
 
 class GroupedQueryAttention(nn.Module):
     """
@@ -227,6 +236,7 @@ class GroupedQueryAttention(nn.Module):
         self.head_dim = config.head_dim
         self.n_rep = self.n_heads // self.n_kv_heads  # repeat factor for KV
         self.use_flash = config.use_flash_attn and _FLASH_AVAILABLE
+        self.sliding_window = config.sliding_window
 
         self.wq = nn.Linear(config.dim, config.n_heads * config.head_dim, bias=False)
         self.wk = nn.Linear(config.dim, config.n_kv_heads * config.head_dim, bias=False)
@@ -294,7 +304,14 @@ class GroupedQueryAttention(nn.Module):
             xq_fa = xq.to(torch.bfloat16)
             xk_fa = xk.to(torch.bfloat16)
             xv_fa = xv.to(torch.bfloat16)
-            out = flash_attn_func(xq_fa, xk_fa, xv_fa, causal=True)
+
+            window_size = (-1, -1)
+            if self.sliding_window is not None:
+                window_size = (self.sliding_window, -1)
+
+            out = flash_attn_func(
+                xq_fa, xk_fa, xv_fa, causal=True, window_size=window_size
+            )
             out = out.to(x.dtype).reshape(B, T, -1)
         else:
             # Scaled dot-product attention — (B, heads, T, head_dim)
@@ -311,7 +328,7 @@ class GroupedQueryAttention(nn.Module):
             scores = F.softmax(scores.float(), dim=-1).type_as(xq)
             scores = self.dropout(scores)
 
-            out = torch.matmul(scores, xv)          # (B, heads, T, head_dim)
+            out = torch.matmul(scores, xv)  # (B, heads, T, head_dim)
             out = out.transpose(1, 2).contiguous().view(B, T, -1)
 
         return self.wo(out)
@@ -320,6 +337,7 @@ class GroupedQueryAttention(nn.Module):
 # ─────────────────────────────────────────
 #  SwiGLU Feed-Forward Network
 # ─────────────────────────────────────────
+
 
 class SwiGLUFFN(nn.Module):
     """
@@ -331,9 +349,9 @@ class SwiGLUFFN(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
         hd = config.ffn_hidden_dim
-        self.w1 = nn.Linear(config.dim, hd, bias=False)   # gate
-        self.w2 = nn.Linear(hd, config.dim, bias=False)   # down
-        self.w3 = nn.Linear(config.dim, hd, bias=False)   # up
+        self.w1 = nn.Linear(config.dim, hd, bias=False)  # gate
+        self.w2 = nn.Linear(hd, config.dim, bias=False)  # down
+        self.w3 = nn.Linear(config.dim, hd, bias=False)  # up
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -343,6 +361,7 @@ class SwiGLUFFN(nn.Module):
 # ─────────────────────────────────────────
 #  Transformer Block
 # ─────────────────────────────────────────
+
 
 class TransformerBlock(nn.Module):
     def __init__(self, config: ModelConfig):
@@ -368,6 +387,7 @@ class TransformerBlock(nn.Module):
 # ─────────────────────────────────────────
 #  Indic LLM — Main Model
 # ─────────────────────────────────────────
+
 
 class IndicLLM(nn.Module):
     """
@@ -444,6 +464,14 @@ class IndicLLM(nn.Module):
         """Upper triangular causal mask — prevents attending to future tokens."""
         mask = torch.full((seq_len, seq_len), float("-inf"), device=device)
         mask = torch.triu(mask, diagonal=1)
+        if self.config.sliding_window is not None:
+            mask = mask.masked_fill(
+                torch.tril(
+                    torch.ones_like(mask, dtype=torch.bool),
+                    diagonal=-self.config.sliding_window,
+                ),
+                float("-inf"),
+            )
         return mask.unsqueeze(0).unsqueeze(0)  # (1, 1, T, T)
 
     # ------------------------------------------------------------------
@@ -504,8 +532,8 @@ class IndicLLM(nn.Module):
         B, T = tokens.shape
         device = tokens.device
 
-        x = self.tok_embeddings(tokens)           # (B, T, dim)
-        freqs_cis = self.freqs_cis[start_pos: start_pos + T]
+        x = self.tok_embeddings(tokens)  # (B, T, dim)
+        freqs_cis = self.freqs_cis[start_pos : start_pos + T]
 
         # During cached inference, only the new token needs a mask of shape (1, 1)
         if T == 1:
@@ -517,7 +545,7 @@ class IndicLLM(nn.Module):
             x = layer(x, freqs_cis, mask, start_pos)
 
         x = self.norm(x)
-        logits = self.output(x).float()           # (B, T, vocab_size)
+        logits = self.output(x).float()  # (B, T, vocab_size)
 
         loss = None
         if targets is not None:
@@ -587,8 +615,11 @@ class IndicLLM(nn.Module):
                 ctx = tokens[:, -1:]
                 logits, _ = self(ctx, start_pos=start_pos + i)
             else:
-                ctx = tokens if tokens.shape[1] <= self.config.max_seq_len \
-                      else tokens[:, -self.config.max_seq_len:]
+                ctx = (
+                    tokens
+                    if tokens.shape[1] <= self.config.max_seq_len
+                    else tokens[:, -self.config.max_seq_len :]
+                )
                 logits, _ = self(ctx, start_pos=0)
 
             next_logits = logits[:, -1, :] / max(temperature, 1e-8)
@@ -618,7 +649,7 @@ class IndicLLM(nn.Module):
                 )
 
             probs = F.softmax(next_logits, dim=-1)
-            next_token = torch.multinomial(probs, num_samples=1)   # (B, 1)
+            next_token = torch.multinomial(probs, num_samples=1)  # (B, 1)
             tokens = torch.cat([tokens, next_token], dim=1)
 
             if eos_id is not None and (next_token == eos_id).all():
@@ -643,7 +674,9 @@ class IndicLLM(nn.Module):
         """
         rows: List[str] = []
         rows.append("=" * 56)
-        rows.append(f"  IndicLLM  —  {self.num_parameters(trainable_only=False) / 1e6:.2f}M params")
+        rows.append(
+            f"  IndicLLM  —  {self.num_parameters(trainable_only=False) / 1e6:.2f}M params"
+        )
         rows.append("=" * 56)
         rows.append(f"  {'Component':<30} {'Params':>10}")
         rows.append("-" * 56)
@@ -663,7 +696,9 @@ class IndicLLM(nn.Module):
         rows.append(f"  Vocab      : {self.config.vocab_size:,}")
         rows.append(f"  Dim        : {self.config.dim}")
         rows.append(f"  Layers     : {self.config.n_layers}")
-        rows.append(f"  Heads      : {self.config.n_heads}Q / {self.config.n_kv_heads}KV")
+        rows.append(
+            f"  Heads      : {self.config.n_heads}Q / {self.config.n_kv_heads}KV"
+        )
         rows.append(f"  FFN hidden : {self.config.ffn_hidden_dim}")
         rows.append(f"  Max seq    : {self.config.max_seq_len}")
         rows.append(
@@ -692,6 +727,8 @@ if __name__ == "__main__":
 
     # KV-cache generation test
     prompt = torch.randint(0, config.vocab_size, (1, 10))
-    generated = model.generate(prompt, max_new_tokens=20, temperature=0.9, use_kv_cache=False)
+    generated = model.generate(
+        prompt, max_new_tokens=20, temperature=0.9, use_kv_cache=False
+    )
     print(f"  Generation  : {prompt.shape[1]} → {generated.shape[1]} tokens")
     print("\n  Model ready!")
