@@ -295,12 +295,9 @@ class GroupedQueryAttention(nn.Module):
         if self.kv_cache is not None:
             xk, xv = self.kv_cache.update(xk, xv, start_pos)
 
-        # Expand KV heads for GQA
-        xk = self._repeat_kv(xk)
-        xv = self._repeat_kv(xv)
-
         if self.use_flash:
-            # Flash Attention expects (B, T, heads, head_dim) in bfloat16/float16
+            # Flash Attention 2 supports GQA natively, no need to repeat KV heads
+            # It expects (B, T, heads, head_dim) in bfloat16/float16
             xq_fa = xq.to(torch.bfloat16)
             xk_fa = xk.to(torch.bfloat16)
             xv_fa = xv.to(torch.bfloat16)
@@ -314,6 +311,10 @@ class GroupedQueryAttention(nn.Module):
             )
             out = out.to(x.dtype).reshape(B, T, -1)
         else:
+            # Expand KV heads for GQA when using manual scaled dot-product attention
+            xk = self._repeat_kv(xk)
+            xv = self._repeat_kv(xv)
+
             # Scaled dot-product attention — (B, heads, T, head_dim)
             xq = xq.transpose(1, 2)
             xk = xk.transpose(1, 2)
@@ -644,9 +645,7 @@ class IndicLLM(nn.Module):
                 cum_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
                 remove = cum_probs - F.softmax(sorted_logits, dim=-1) > top_p
                 sorted_logits[remove] = float("-inf")
-                next_logits = torch.zeros_like(next_logits).scatter_(
-                    1, sorted_idx, sorted_logits
-                )
+                next_logits.scatter_(1, sorted_idx, sorted_logits)
 
             probs = F.softmax(next_logits, dim=-1)
             next_token = torch.multinomial(probs, num_samples=1)  # (B, 1)

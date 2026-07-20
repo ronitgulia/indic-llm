@@ -1,8 +1,3 @@
-"""
-Step 2: Dataset download script for Indic languages
-Sources: AI4Bharat (updated dataset names 2024)
-"""
-
 import os
 import json
 from datasets import load_dataset
