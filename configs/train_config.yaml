@@ -22,6 +22,7 @@ training:
   warmup_steps: 200
   weight_decay: 0.1
   grad_clip: 1.0
+  label_smoothing: 0.1    # prevents overconfident predictions, improves generalisation
   seed: 42
   use_amp: true           # mixed precision (set false on CPU)
 

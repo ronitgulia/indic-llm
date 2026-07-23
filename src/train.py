@@ -95,6 +95,7 @@ class TrainConfig:
     weight_decay: float = 0.1
     grad_clip: float = 1.0
     dropout: float = 0.1
+    label_smoothing: float = 0.1  # cross-entropy label smoothing
 
     # ── Checkpointing ──────────────────────────────────────────────────
     checkpoint_dir: str = "checkpoints"
@@ -421,6 +422,7 @@ class Trainer:
             use_flash_attn=cfg.use_flash_attn,
             rope_scaling_factor=cfg.rope_scaling_factor,
             sliding_window=cfg.sliding_window,
+            label_smoothing=cfg.label_smoothing,
         )
         self.model = IndicLLM(model_cfg).to(self.device)
         log.info("Model parameters: %.2fM", self.model.num_parameters() / 1e6)
@@ -524,6 +526,8 @@ class Trainer:
         tokens_seen = 0
         t_start = time.time()
         best_val_loss = float("inf")
+        grad_norm_ema = 0.0  # exponential moving average of gradient norms
+        grad_norm_ema_alpha = 0.98  # smoothing factor
 
         for step in range(self.start_step, cfg.max_steps):
             # ── LR update ────────────────────────────────────────────────
@@ -553,6 +557,31 @@ class Trainer:
             # ── Grad clip + step ─────────────────────────────────────────
             scaler.unscale_(optimizer)
             grad_norm = nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
+
+            # ── Gradient-aware LR recovery ────────────────────────────────
+            # If grad norm spikes well above the running average, temporarily
+            # scale down the LR to avoid catastrophic loss spikes — a
+            # technique used in production LLM training (cf. PaLM, Chinchilla).
+            if step > cfg.warmup_steps:
+                if grad_norm_ema > 0 and grad_norm > 2.0 * grad_norm_ema:
+                    recovery_scale = grad_norm_ema / grad_norm
+                    for pg in optimizer.param_groups:
+                        pg["lr"] = pg["lr"] * recovery_scale
+                    log.info(
+                        "  ⚡ grad spike detected (%.3f vs ema %.3f) — LR scaled to %.2e",
+                        grad_norm, grad_norm_ema, lr * recovery_scale,
+                    )
+                grad_norm_ema = (
+                    grad_norm_ema_alpha * grad_norm_ema
+                    + (1 - grad_norm_ema_alpha) * grad_norm
+                )
+            else:
+                # During warmup, just track the EMA without intervention
+                grad_norm_ema = (
+                    grad_norm_ema_alpha * grad_norm_ema
+                    + (1 - grad_norm_ema_alpha) * grad_norm
+                )
+
             scaler.step(optimizer)
             scaler.update()
             optimizer.zero_grad()

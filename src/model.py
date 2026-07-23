@@ -44,6 +44,7 @@ class ModelConfig:
     dropout: float = 0.1
     rope_theta: float = 10000.0
     pad_id: int = 0
+    label_smoothing: float = 0.0  # Cross-entropy label smoothing (0.1 recommended)
 
     # Flash Attention 2 (requires the flash-attn package)
     use_flash_attn: bool = False
@@ -554,6 +555,7 @@ class IndicLLM(nn.Module):
                 logits.view(-1, self.config.vocab_size),
                 targets.view(-1),
                 ignore_index=self.config.pad_id,
+                label_smoothing=self.config.label_smoothing,
             )
 
         return logits, loss
