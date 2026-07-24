@@ -3,8 +3,10 @@ Indic LLM — Evaluation Harness
 ================================
 Provides:
   - PerplexityEvaluator  : Computes model perplexity on a held-out JSONL corpus
-  - GenerationQualityMetrics : Analyses generated text for repetition, script ratio, etc.
-  - run_eval() : Orchestrates both evaluators and writes a JSON report
+  - AccuracyEvaluator    : Token-level next-token prediction accuracy
+  - GenerationQualityMetrics : Analyses generated text for repetition, script ratio,
+                               BLEU, and ChrF (character F-score for Indic scripts)
+  - run_eval() : Orchestrates all evaluators and writes a JSON report
 
 Usage (CLI):
     python eval/evaluate.py \
@@ -51,6 +53,7 @@ log = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from model import IndicLLM, ModelConfig  # noqa: E402
+from benchmarks import compute_bleu, compute_chrf, token_accuracy  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Utility: load a checkpoint
@@ -204,6 +207,92 @@ class PerplexityEvaluator:
 
 
 # ---------------------------------------------------------------------------
+# Token-level Accuracy Evaluator
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AccuracyResult:
+    accuracy: float
+    correct: int
+    total: int
+    eval_time_s: float
+
+
+class AccuracyEvaluator:
+    """
+    Compute token-level next-token prediction accuracy on held-out data.
+
+    This measures the model's raw predictive accuracy — the fraction of
+    non-padding tokens for which argmax(logits) exactly matches the target.
+    Unlike perplexity, this gives an intuitive "percent correct" measure.
+
+    Parameters
+    ----------
+    model     : Trained IndicLLM in eval mode.
+    tokenizer : SentencePiece model matching the training tokenizer.
+    device    : Device to run evaluation on.
+    """
+
+    def __init__(
+        self,
+        model: IndicLLM,
+        tokenizer: spm.SentencePieceProcessor,
+        device: torch.device,
+    ):
+        self.model = model
+        self.tokenizer = tokenizer
+        self.device = device
+
+    @torch.no_grad()
+    def evaluate(
+        self,
+        data_path: str,
+        batch_size: int = 8,
+        max_samples: int = 2000,
+        max_seq_len: int = 512,
+    ) -> AccuracyResult:
+        """
+        Evaluate token accuracy on *data_path*.
+
+        Returns
+        -------
+        AccuracyResult with accuracy, correct, total, eval_time_s.
+        """
+        dataset = _PerplexityDataset(data_path, self.tokenizer, max_seq_len, max_samples)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+
+        all_refs: List[List[int]] = []
+        all_preds: List[List[int]] = []
+        t0 = time.time()
+
+        for batch in loader:
+            tokens = batch.to(self.device)            # (B, T+1)
+            inputs, targets = tokens[:, :-1], tokens[:, 1:]
+
+            logits, _ = self.model(inputs)
+            preds = logits.argmax(dim=-1)              # (B, T)
+
+            all_refs.extend(targets.cpu().tolist())
+            all_preds.extend(preds.cpu().tolist())
+
+        pad_id = self.model.config.pad_id
+        acc_result = token_accuracy(all_refs, all_preds, ignore_id=pad_id)
+        elapsed = time.time() - t0
+
+        log.info(
+            "Token accuracy — %.4f (%d/%d) | time: %.1fs",
+            acc_result["accuracy"], acc_result["correct"], acc_result["total"], elapsed,
+        )
+        return AccuracyResult(
+            accuracy=acc_result["accuracy"],
+            correct=acc_result["correct"],
+            total=acc_result["total"],
+            eval_time_s=elapsed,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Generation Quality Metrics
 # ---------------------------------------------------------------------------
 
@@ -220,6 +309,8 @@ class GenerationQualityResult:
     avg_distinct_1: float        # unigram diversity
     avg_distinct_2: float        # bigram diversity
     avg_repetition_rate: float   # fraction of repeated 4-grams
+    corpus_bleu: float = 0.0     # corpus-level BLEU score
+    corpus_chrf: float = 0.0     # corpus-level ChrF score
     samples: List[Dict] = field(default_factory=list)
 
 
@@ -347,6 +438,12 @@ class GenerationQualityMetrics:
         def _avg(lst: List[float]) -> float:
             return sum(lst) / max(1, len(lst))
 
+        # Compute corpus-level BLEU and ChrF across all reference/hypothesis pairs
+        ref_texts = [s["prompt"] for s in samples]
+        hyp_texts = [s["generated"] for s in samples]
+        bleu_result = compute_bleu(ref_texts, hyp_texts)
+        chrf_result = compute_chrf(ref_texts, hyp_texts)
+
         result = GenerationQualityResult(
             n_prompts=len(prompts),
             avg_tokens=_avg(all_ntok),
@@ -355,15 +452,20 @@ class GenerationQualityMetrics:
             avg_distinct_1=_avg(all_d1),
             avg_distinct_2=_avg(all_d2),
             avg_repetition_rate=_avg(all_rep),
+            corpus_bleu=bleu_result["bleu"],
+            corpus_chrf=chrf_result["chrf"],
             samples=samples,
         )
 
         log.info(
-            "Generation quality — hindi_ratio: %.3f | distinct-1: %.3f | distinct-2: %.3f | rep: %.3f",
+            "Generation quality — hindi_ratio: %.3f | distinct-1: %.3f | "
+            "distinct-2: %.3f | rep: %.3f | BLEU: %.4f | ChrF: %.4f",
             result.avg_hindi_ratio,
             result.avg_distinct_1,
             result.avg_distinct_2,
             result.avg_repetition_rate,
+            result.corpus_bleu,
+            result.corpus_chrf,
         )
         return result
 
@@ -413,6 +515,11 @@ def run_eval(
     ppl_eval = PerplexityEvaluator(model, tokenizer, device)
     ppl_result = ppl_eval.evaluate(data_path, batch_size=batch_size, max_samples=max_samples)
     report["perplexity"] = asdict(ppl_result)
+
+    # Token-level accuracy
+    acc_eval = AccuracyEvaluator(model, tokenizer, device)
+    acc_result = acc_eval.evaluate(data_path, batch_size=batch_size, max_samples=max_samples)
+    report["token_accuracy"] = asdict(acc_result)
 
     # Generation quality (optional)
     if prompts_path and Path(prompts_path).exists():
