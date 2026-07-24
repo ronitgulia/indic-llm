@@ -193,7 +193,7 @@ Edit `configs/train_config.yaml` to switch variants — no code changes required
 | **Training** | AdamW, cosine LR with warmup, gradient accumulation, AMP |
 | **Monitoring** | Weights & Biases integration (optional, `--use_wandb`) |
 | **Checkpointing** | Best-N checkpoint management with metadata JSON |
-| **Evaluation** | Perplexity + distinct-1/2 + repetition rate metrics |
+| **Evaluation** | Perplexity + token accuracy + distinct-1/2 + repetition rate + BLEU + ChrF metrics |
 | **Tokenizer** | 32K BPE SentencePiece, Devanagari + Latin coverage |
 
 ---
