@@ -5,7 +5,7 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-A research-grade, end-to-end training framework for **decoder-only language models** focused on Indic languages (Hindi-first, multilingual-ready). Built on a LLaMA-2-style architecture with modern training best-practices.
+A research-grade, end-to-end training framework for **decoder-only language models** focused on Indic languages (starting with Hindi, but built to be multilingual). I put this together using a LLaMA-2-style architecture and modern training best practices to make it easy to experiment and train models from scratch!
 
 ---
 
