@@ -9,6 +9,7 @@ Utilities for exporting trained IndicLLM checkpoints to:
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
@@ -18,13 +19,14 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import torch
+import torch.nn as nn
 
 # Ensure src/ is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
-    from model import ModelConfig
+    from model import IndicLLM, ModelConfig
 except ImportError:
-    from src.model import ModelConfig  # type: ignore[no-redef]
+    from src.model import IndicLLM, ModelConfig  # type: ignore[no-redef]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -171,3 +173,103 @@ def export_to_hf(
 
     log.info("✓ Hugging Face model exported successfully to: %s", output_dir)
     return output_dir
+
+
+def quantize_model(model: IndicLLM) -> nn.Module:
+    """
+    Apply PyTorch dynamic INT8 quantization to all Linear projections.
+    Reduces parameter size by up to 60-70% and accelerates CPU matrix multiplication.
+    """
+    model.eval()
+    quantized = torch.ao.quantization.quantize_dynamic(
+        model,
+        {nn.Linear},
+        dtype=torch.qint8,
+    )
+    return quantized
+
+
+def quantize_checkpoint(checkpoint_path: str, output_path: str) -> str:
+    """
+    Load an IndicLLM checkpoint, quantize weights to INT8, and save.
+    """
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    log.info("Loading checkpoint for quantization: %s", checkpoint_path)
+
+    ckpt = torch.load(checkpoint_path, map_location="cpu")
+    raw_cfg = ckpt.get("config", {})
+    model_cfg = ModelConfig(
+        vocab_size=raw_cfg.get("vocab_size", 32000),
+        dim=raw_cfg.get("model_dim", 512),
+        n_layers=raw_cfg.get("n_layers", 8),
+        n_heads=raw_cfg.get("n_heads", 8),
+        n_kv_heads=raw_cfg.get("n_kv_heads", 4),
+        max_seq_len=raw_cfg.get("max_seq_len", 512),
+        dropout=0.0,
+        sliding_window=raw_cfg.get("sliding_window", None),
+    )
+
+    model = IndicLLM(model_cfg)
+    model.load_state_dict(ckpt["model_state_dict"], strict=False)
+    model.eval()
+
+    log.info("Applying dynamic INT8 quantization...")
+    quantized_model = quantize_model(model)
+
+    payload = {
+        "step": ckpt.get("step", 0),
+        "model_state_dict": quantized_model.state_dict(),
+        "config": raw_cfg,
+        "quantized": True,
+        "quantization_type": "dynamic_int8",
+    }
+    torch.save(payload, output_path)
+
+    orig_size = os.path.getsize(checkpoint_path) / (1024 * 1024)
+    quant_size = os.path.getsize(output_path) / (1024 * 1024)
+    log.info(
+        "✓ Quantization complete: %.1f MB -> %.1f MB (%.1f%% reduction)",
+        orig_size,
+        quant_size,
+        100.0 * (1.0 - quant_size / orig_size),
+    )
+    return output_path
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Indic LLM Model Export & Quantization Bridge")
+    parser.add_argument("--checkpoint", type=str, required=True, help="Path to input .pt checkpoint")
+    parser.add_argument(
+        "--format",
+        type=str,
+        default="hf",
+        choices=["hf", "int8", "all"],
+        help="Export format: 'hf' (HuggingFace), 'int8' (Dynamic Quantization), or 'all'",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="export/hf_model",
+        help="Target directory for HuggingFace export",
+    )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        default="checkpoints/quantized_int8.pt",
+        help="Target path for INT8 quantized checkpoint",
+    )
+    parser.add_argument(
+        "--tokenizer",
+        type=str,
+        default="data/tokenizer/indic_spm.model",
+        help="SentencePiece tokenizer path",
+    )
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    if args.format in ("hf", "all"):
+        export_to_hf(args.checkpoint, args.output_dir, args.tokenizer)
+    if args.format in ("int8", "all"):
+        quantize_checkpoint(args.checkpoint, args.output_path)
