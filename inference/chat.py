@@ -15,16 +15,17 @@ import argparse
 import json
 import os
 import sys
-import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import sentencepiece as spm
 import torch
 
-# Allow importing from src/
+# Allow importing from src/ and inference/
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from model import IndicLLM, ModelConfig
+from engine import GenerationConfig, InferenceEngine
 
 # ─────────────────────────────────────────
 #  ANSI colours for terminal UX
@@ -82,28 +83,6 @@ def load_model(checkpoint_path: str, device: str = "auto") -> tuple[IndicLLM, Mo
 
 
 # ─────────────────────────────────────────
-#  Repetition Penalty
-# ─────────────────────────────────────────
-
-def apply_repetition_penalty(logits: torch.Tensor, generated_ids: torch.Tensor,
-                              penalty: float = 1.2) -> torch.Tensor:
-    """
-    Penalise tokens that have already appeared in the generated sequence.
-    penalty > 1.0 reduces repetition; 1.0 = no effect.
-    """
-    if penalty == 1.0 or generated_ids.numel() == 0:
-        return logits
-
-    unique_ids = generated_ids.unique()
-    for token_id in unique_ids:
-        if logits[0, token_id] > 0:
-            logits[0, token_id] /= penalty
-        else:
-            logits[0, token_id] *= penalty
-    return logits
-
-
-# ─────────────────────────────────────────
 #  Core Generation Function
 # ─────────────────────────────────────────
 
@@ -119,68 +98,23 @@ def generate(
     repetition_penalty: float = 1.15,
     eos_id: Optional[int] = None,
     device: str = "cpu",
-) -> str:
+    stop_sequences: Optional[List[str]] = None,
+) -> Tuple[str, float]:
     """
-    Generate text from a text prompt string.
-    Returns the generated text (excluding the prompt).
+    Generate text from a prompt string using the accelerated InferenceEngine.
+    Returns (generated_text, tokens_per_second).
     """
-    import torch.nn.functional as F
-
-    model.eval()
-    if eos_id is None:
-        eos_id = tokenizer.eos_id()   # typically 3
-
-    input_ids = tokenizer.encode(prompt, out_type=int)
-    tokens = torch.tensor([input_ids], dtype=torch.long, device=device)
-    generated_ids = tokens.clone()
-
-    start = time.time()
-    new_token_count = 0
-
-    for _ in range(max_new_tokens):
-        # Truncate context to model's max_seq_len
-        ctx = tokens if tokens.shape[1] <= model.config.max_seq_len \
-              else tokens[:, -model.config.max_seq_len:]
-
-        logits, _ = model(ctx)
-        logits = logits[:, -1, :].float()     # (1, vocab_size)
-
-        # Apply repetition penalty on already-generated tokens
-        logits = apply_repetition_penalty(logits, generated_ids[0], repetition_penalty)
-
-        # Temperature scaling
-        logits = logits / max(temperature, 1e-8)
-
-        # Top-k filtering
-        if top_k > 0:
-            v, _ = torch.topk(logits, min(top_k, logits.shape[-1]))
-            logits[logits < v[:, [-1]]] = float("-inf")
-
-        # Top-p (nucleus) filtering
-        if top_p < 1.0:
-            sorted_logits, sorted_idx = torch.sort(logits, descending=True)
-            cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-            sorted_to_remove = cumulative_probs - F.softmax(sorted_logits, dim=-1) > top_p
-            sorted_logits[sorted_to_remove] = float("-inf")
-            logits = torch.zeros_like(logits).scatter_(1, sorted_idx, sorted_logits)
-
-        probs = F.softmax(logits, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1)   # (1, 1)
-
-        tokens = torch.cat([tokens, next_token], dim=1)
-        generated_ids = torch.cat([generated_ids, next_token], dim=1)
-        new_token_count += 1
-
-        if next_token.item() == eos_id:
-            break
-
-    elapsed = time.time() - start
-    tok_per_sec = new_token_count / max(elapsed, 1e-6)
-
-    # Decode only the new tokens (not the prompt)
-    new_ids = tokens[0, len(input_ids):].tolist()
-    output_text = tokenizer.decode(new_ids)
-    return output_text, tok_per_sec
+    engine = InferenceEngine(model, tokenizer, device=torch.device(device))
+    config = GenerationConfig(
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k,
+        repetition_penalty=repetition_penalty,
+        stop_sequences=stop_sequences or [],
+        eos_id=eos_id,
+    )
+    return engine.generate(prompt, config)
 
 
 # ─────────────────────────────────────────
@@ -258,16 +192,16 @@ def interactive_chat(model: IndicLLM, tokenizer: spm.SentencePieceProcessor,
     """Full interactive REPL for chatting with the Indic LLM."""
     cprint(BANNER, Colors.CYAN, bold=True)
 
+    engine = InferenceEngine(model, tokenizer, device=torch.device(device))
     history: List[dict] = []
     system_prompt = DEFAULT_SYSTEM
 
-    gen_kwargs = dict(
-        max_new_tokens     = args.max_new_tokens,
-        temperature        = args.temperature,
-        top_p              = args.top_p,
-        top_k              = args.top_k,
-        repetition_penalty = args.repetition_penalty,
-        device             = device,
+    gen_config = GenerationConfig(
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        top_k=args.top_k,
+        repetition_penalty=args.repetition_penalty,
     )
 
     while True:
@@ -293,15 +227,17 @@ def interactive_chat(model: IndicLLM, tokenizer: spm.SentencePieceProcessor,
 
         elif user_input.lower() == "/settings":
             cprint("\n  Current generation settings:", Colors.CYAN)
-            for k, v in gen_kwargs.items():
-                if k != "device":
-                    print(f"    {k:25s}: {v}")
+            print(f"    max_new_tokens           : {gen_config.max_new_tokens}")
+            print(f"    temperature              : {gen_config.temperature}")
+            print(f"    top_p                    : {gen_config.top_p}")
+            print(f"    top_k                    : {gen_config.top_k}")
+            print(f"    repetition_penalty       : {gen_config.repetition_penalty}")
             continue
 
         elif user_input.startswith("/temperature "):
             try:
-                gen_kwargs["temperature"] = float(user_input.split()[1])
-                cprint(f"  Temperature set to {gen_kwargs['temperature']}", Colors.GREEN)
+                gen_config.temperature = float(user_input.split()[1])
+                cprint(f"  Temperature set to {gen_config.temperature}", Colors.GREEN)
             except (IndexError, ValueError):
                 cprint("  Usage: /temperature 0.7", Colors.RED)
             continue
@@ -313,14 +249,15 @@ def interactive_chat(model: IndicLLM, tokenizer: spm.SentencePieceProcessor,
         # ── Generate ───────────────────────────────────────
         cprint("\nModel › ", Colors.GREEN + Colors.BOLD, bold=False)
         try:
-            response, tok_per_sec = generate(model, tokenizer, prompt, **gen_kwargs)
-            response = response.strip()
-
-            # Stream-style print (character by character for UX feel)
-            for char in response:
-                print(char, end="", flush=True)
+            chunks: List[str] = []
+            tok_per_sec = 0.0
+            for token_str, tok_s in engine.generate_stream(prompt, gen_config):
+                print(token_str, end="", flush=True)
+                chunks.append(token_str)
+                tok_per_sec = tok_s
             print()
 
+            response = "".join(chunks).strip()
             history.append({"role": "assistant", "content": response})
             cprint(f"\n  [{tok_per_sec:.1f} tok/s]", Colors.DIM)
 
