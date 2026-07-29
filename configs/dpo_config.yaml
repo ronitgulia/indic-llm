@@ -1,0 +1,36 @@
+# Indic LLM - Direct Preference Optimization (DPO) Configuration
+# ===============================================================
+# Hyperparameters for preference alignment of SFT checkpoints.
+# Usage: python src/dpo.py --config configs/dpo_config.yaml
+
+model:
+  vocab_size: 32000
+  dim: 512
+  n_layers: 8
+  n_heads: 8
+  n_kv_heads: 4
+  max_seq_len: 512
+
+dpo:
+  base_checkpoint: "checkpoints/sft/sft_best.pt"
+  output_dir: "checkpoints/dpo"
+  beta: 0.1                      # temperature parameter for DPO implicit reward
+  batch_size: 2
+  grad_accumulation_steps: 8     # effective batch = 16
+  max_steps: 500
+  learning_rate: 1.0e-6          # standard DPO learning rate
+  min_lr: 1.0e-7
+  warmup_steps: 20
+  weight_decay: 0.01
+  grad_clip: 1.0
+  eval_every: 50
+  save_every: 100
+  keep_best_n: 3
+  log_every: 10
+  val_fraction: 0.05
+  seed: 42
+  use_amp: true
+
+data:
+  tokenizer_path: "data/tokenizer/indic_spm.model"
+  data_path: "data/processed/indic_preferences.jsonl"
