@@ -24,8 +24,9 @@ import torch
 # Allow importing from src/ and inference/
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from model import IndicLLM, ModelConfig
 from engine import GenerationConfig, InferenceEngine
+
+from model import IndicLLM, ModelConfig
 
 # ─────────────────────────────────────────
 #  ANSI colours for terminal UX

@@ -43,6 +43,8 @@ indic-llm/
 │   ├── model.py          # Transformer architecture (GQA, RoPE, SwiGLU, KV-cache)
 │   ├── train.py          # Pre-training loop (AdamW, cosine LR, AMP, W&B, val loss)
 │   ├── sft.py            # Supervised fine-tuning with prompt loss masking
+│   ├── dpo.py            # Direct Preference Optimization (DPO) alignment
+│   ├── export.py         # HuggingFace & dynamic INT8 export bridge
 │   ├── tokenizer.py      # IndicTokenizer class wrapping SentencePiece BPE
 │   └── preprocess.py     # Text cleaning pipeline (dedup, quality filter, schemas)
 ├── data/
@@ -50,15 +52,20 @@ indic-llm/
 │   └── processed/             # Cleaned JSONL files (git-ignored)
 ├── eval/
 │   ├── evaluate.py            # Perplexity + generation quality evaluation harness
+│   ├── benchmarks.py          # BLEU, ChrF, token accuracy standalone benchmarks
 │   └── human_eval/
 │       └── sample_prompts.jsonl   # 20 Hindi evaluation prompts
 ├── inference/
-│   └── chat.py                # Interactive chat CLI + batch inference
+│   ├── engine.py              # KV-cached streaming autoregressive generation engine
+│   ├── chat.py                # Interactive streaming chat CLI + batch inference
+│   └── serve.py               # OpenAI-compatible streaming HTTP API server
 ├── configs/
 │   ├── train_config.yaml      # Pre-training hyperparameters with scaling guide
-│   └── sft_config.yaml        # Instruction fine-tuning hyperparameters
+│   ├── sft_config.yaml        # Instruction fine-tuning hyperparameters
+│   └── dpo_config.yaml        # Preference alignment hyperparameters
+├── tests/                     # Comprehensive pytest test suite (38 unit tests)
 ├── .github/workflows/
-│   └── ci.yml                 # Lint (ruff) + type-check (mypy) + smoke test
+│   └── ci.yml                 # Lint (ruff) + type-check + pytest suite
 ├── requirements.txt
 └── CONTRIBUTING.md
 ```
@@ -148,6 +155,16 @@ python src/sft.py \
     --base_checkpoint checkpoints/step_010000.pt
 ```
 
+### 5c — Direct Preference Optimization (DPO)
+
+Align model outputs with human feedback using paired preferences:
+
+```bash
+python src/dpo.py \
+    --config configs/dpo_config.yaml \
+    --base_checkpoint checkpoints/sft/sft_best.pt
+```
+
 ### 6 — Evaluate
 
 ```bash
@@ -162,7 +179,7 @@ python eval/evaluate.py \
 ### 7 — Chat / Inference
 
 ```bash
-# Interactive chat (Hindi + English):
+# Interactive streaming chat (Hindi + English):
 python inference/chat.py --checkpoint checkpoints/step_010000.pt
 
 # Single prompt:
@@ -175,6 +192,28 @@ python inference/chat.py \
     --checkpoint checkpoints/step_010000.pt \
     --batch_file prompts.txt \
     --output_file results/output.jsonl
+```
+
+### 7b — HTTP API Serving
+
+Launch an OpenAI-compatible REST API server supporting SSE token streaming:
+
+```bash
+python inference/serve.py \
+    --checkpoint checkpoints/step_010000.pt \
+    --port 8000
+```
+
+### 8 — Export & Quantization
+
+Export checkpoints for Hugging Face Transformers or dynamic INT8 CPU inference:
+
+```bash
+# Export to Hugging Face format:
+python src/export.py --checkpoint checkpoints/step_010000.pt --format hf --output_dir export/hf_model
+
+# Quantize to dynamic INT8 for lightweight edge deployment:
+python src/export.py --checkpoint checkpoints/step_010000.pt --format int8 --output_path checkpoints/indic_int8.pt
 ```
 
 ---

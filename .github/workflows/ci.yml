@@ -76,3 +76,12 @@ jobs:
 
       - name: Verify SFT module imports cleanly
         run: python -c "from src.sft import InstructDataset, SFTConfig; print('SFT OK')"
+
+      - name: Verify DPO module imports cleanly
+        run: python -c "from src.dpo import PreferenceDataset, DPOConfig; print('DPO OK')"
+
+      - name: Verify export module imports cleanly
+        run: python -c "from src.export import build_hf_config, convert_state_dict_to_hf; print('export OK')"
+
+      - name: Verify inference engine imports cleanly
+        run: python -c "from inference.engine import GenerationConfig, InferenceEngine; print('engine OK')"
