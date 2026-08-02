@@ -1,0 +1,36 @@
+# Indic LLM - Benchmark Evaluation Configuration
+# ===============================================
+# Standard configuration for evaluating Indic LLM models on multi-choice QA tasks.
+# Usage: python eval/benchmark_suite.py --checkpoint checkpoints/step_010000.pt --tokenizer data/tokenizer/indic_spm.model
+
+model:
+  vocab_size: 32000
+  dim: 512
+  n_layers: 8
+  n_heads: 8
+  n_kv_heads: 4
+  max_seq_len: 512
+
+evaluation:
+  checkpoint: "checkpoints/step_010000.pt"
+  tokenizer: "data/tokenizer/indic_spm.model"
+  task_path: "eval/tasks/indic_qa_samples.jsonl"
+  output_json: "eval/results/benchmark_results.json"
+  report_md: "eval/results/benchmark_report.md"
+  prompt_style: "direct"          # "direct" or "context"
+  length_normalization: true       # normalize sequence log-likelihood by candidate length
+  device: "cuda"
+
+benchmarks:
+  - name: "indic_qa_devanagari"
+    category: "Indic Multi-Choice QA"
+    path: "eval/tasks/indic_qa_samples.jsonl"
+    description: "Curated Devanagari QA benchmark covering Hindi grammar, reasoning, history, geography, and general knowledge."
+    categories:
+      - "General Knowledge"
+      - "Linguistics"
+      - "Common Sense"
+      - "Grammar"
+      - "History"
+      - "Geography"
+      - "Reasoning"

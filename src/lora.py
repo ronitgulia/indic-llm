@@ -193,6 +193,33 @@ def save_adapter(model: IndicLLM, config: LoRAConfig, output_dir: str) -> str:
     return output_dir
 
 
+def load_adapter(model: IndicLLM, adapter_dir: str) -> IndicLLM:
+    """
+    Load adapter weights from adapter_model.pt into an IndicLLM model.
+    """
+    weights_path = os.path.join(adapter_dir, "adapter_model.pt")
+    if not os.path.isfile(weights_path):
+        raise FileNotFoundError(f"Adapter weights not found at: {weights_path}")
+
+    device = next(model.parameters()).device
+    adapter_weights = torch.load(weights_path, map_location=device)
+    model_modules = dict(model.named_modules())
+
+    loaded_count = 0
+    for key, weight in adapter_weights.items():
+        mod_name, param_name = key.rsplit(".", 1)
+        if mod_name in model_modules:
+            mod = model_modules[mod_name]
+            if hasattr(mod, param_name):
+                param = getattr(mod, param_name)
+                with torch.no_grad():
+                    param.copy_(weight.to(param.device))
+                loaded_count += 1
+
+    log.info("Loaded %d LoRA weight tensors from %s", loaded_count, weights_path)
+    return model
+
+
 def merge_and_unload(model: IndicLLM) -> IndicLLM:
     """
     Merge all LoRA adapters into base weights and replace LoRALinear with pure nn.Linear.
