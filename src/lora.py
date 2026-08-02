@@ -226,15 +226,13 @@ def merge_and_unload(model: IndicLLM) -> IndicLLM:
     Returns the fused model ready for standard inference.
     """
     for layer in model.layers:
-        for module_container in (layer.attn, layer.ffn):
-            for attr_name in list(module_container.__dict__.keys()) + [
-                "wq", "wk", "wv", "wo", "w1", "w2", "w3"
-            ]:
-                if hasattr(module_container, attr_name):
-                    module = getattr(module_container, attr_name)
-                    if isinstance(module, LoRALinear):
-                        module.merge()
-                        setattr(module_container, attr_name, module.base_layer)
+        for container in (layer.attn, layer.ffn):
+            for attr in ("wq", "wk", "wv", "wo", "w1", "w2", "w3"):
+                if hasattr(container, attr):
+                    mod = getattr(container, attr)
+                    if isinstance(mod, LoRALinear):
+                        mod.merge()
+                        setattr(container, attr, mod.base_layer)
 
     log.info("Merged all LoRA adapters into base model weights")
     return model

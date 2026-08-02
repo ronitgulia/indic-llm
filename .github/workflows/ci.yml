@@ -85,3 +85,9 @@ jobs:
 
       - name: Verify inference engine imports cleanly
         run: python -c "from inference.engine import GenerationConfig, InferenceEngine; print('engine OK')"
+
+      - name: Verify LoRA module imports cleanly
+        run: python -c "from src.lora import LoRAConfig, LoRALinear, apply_lora; print('LoRA OK')"
+
+      - name: Verify Benchmark Suite imports cleanly
+        run: python -c "from eval.benchmark_suite import MCQASample, evaluate_mcqa; print('benchmark OK')"

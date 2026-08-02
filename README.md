@@ -41,8 +41,9 @@ A research-grade, end-to-end training framework for **decoder-only language mode
 indic-llm/
 ├── src/
 │   ├── model.py          # Transformer architecture (GQA, RoPE, SwiGLU, KV-cache)
+│   ├── lora.py           # Low-Rank Adaptation (LoRA) PEFT & adapter merging
 │   ├── train.py          # Pre-training loop (AdamW, cosine LR, AMP, W&B, val loss)
-│   ├── sft.py            # Supervised fine-tuning with prompt loss masking
+│   ├── sft.py            # Supervised fine-tuning with LoRA & prompt loss masking
 │   ├── dpo.py            # Direct Preference Optimization (DPO) alignment
 │   ├── export.py         # HuggingFace & dynamic INT8 export bridge
 │   ├── tokenizer.py      # IndicTokenizer class wrapping SentencePiece BPE
@@ -51,8 +52,11 @@ indic-llm/
 │   ├── download_datasets.py   # Download corpora from HuggingFace
 │   └── processed/             # Cleaned JSONL files (git-ignored)
 ├── eval/
+│   ├── benchmark_suite.py     # Multi-choice log-likelihood evaluation & leaderboard
 │   ├── evaluate.py            # Perplexity + generation quality evaluation harness
 │   ├── benchmarks.py          # BLEU, ChrF, token accuracy standalone benchmarks
+│   ├── tasks/
+│   │   └── indic_qa_samples.jsonl # Curated Indic multiple-choice QA benchmarks
 │   └── human_eval/
 │       └── sample_prompts.jsonl   # 20 Hindi evaluation prompts
 ├── inference/
@@ -62,8 +66,10 @@ indic-llm/
 ├── configs/
 │   ├── train_config.yaml      # Pre-training hyperparameters with scaling guide
 │   ├── sft_config.yaml        # Instruction fine-tuning hyperparameters
-│   └── dpo_config.yaml        # Preference alignment hyperparameters
-├── tests/                     # Comprehensive pytest test suite (38 unit tests)
+│   ├── lora_sft_config.yaml   # Parameter-efficient LoRA SFT hyperparameters
+│   ├── dpo_config.yaml        # Preference alignment hyperparameters
+│   └── eval_config.yaml       # Multi-task benchmark evaluation settings
+├── tests/                     # Comprehensive pytest test suite (44 unit tests)
 ├── .github/workflows/
 │   └── ci.yml                 # Lint (ruff) + type-check + pytest suite
 ├── requirements.txt
@@ -165,6 +171,18 @@ python src/dpo.py \
     --base_checkpoint checkpoints/sft/sft_best.pt
 ```
 
+### 5d — Parameter-Efficient Fine-Tuning (LoRA)
+
+Train lightweight low-rank adapters (< 1% trainable parameters, 4x lower memory footprint):
+
+```bash
+python src/sft.py \
+    --config configs/lora_sft_config.yaml \
+    --use_lora \
+    --lora_r 8 \
+    --lora_alpha 16.0
+```
+
 ### 6 — Evaluate
 
 ```bash
@@ -174,6 +192,19 @@ python eval/evaluate.py \
     --tokenizer data/tokenizer/indic_spm.model \
     --prompts eval/human_eval/sample_prompts.jsonl \
     --output eval/results/report.json
+```
+
+### 6b — Indic Benchmark Suite & Leaderboard
+
+Evaluate multi-choice question answering accuracy using length-normalized sequence log-likelihood:
+
+```bash
+python eval/benchmark_suite.py \
+    --checkpoint checkpoints/step_010000.pt \
+    --tokenizer data/tokenizer/indic_spm.model \
+    --task eval/tasks/indic_qa_samples.jsonl \
+    --output eval/results/benchmark_results.json \
+    --report_md eval/results/benchmark_report.md
 ```
 
 ### 7 — Chat / Inference
@@ -244,7 +275,8 @@ Edit `configs/train_config.yaml` to switch variants — no code changes required
 | **Training** | AdamW, cosine LR with warmup, gradient accumulation, AMP |
 | **Monitoring** | Weights & Biases integration (optional, `--use_wandb`) |
 | **Checkpointing** | Best-N checkpoint management with metadata JSON |
-| **Evaluation** | Perplexity + token accuracy + distinct-1/2 + repetition rate + BLEU + ChrF metrics |
+| **PEFT (LoRA)** | Low-Rank Adaptation for attention/MLP layers (< 1% trainable params) with weight merging |
+| **Evaluation** | Perplexity + token accuracy + BLEU/ChrF + Multi-Choice QA Benchmark Suite with Leaderboards |
 | **Tokenizer** | 32K BPE SentencePiece, Devanagari + Latin coverage |
 
 ---

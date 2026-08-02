@@ -40,3 +40,4 @@ sft:
 data:
   tokenizer_path: "data/tokenizer/indic_spm.model"
   data_path: "data/processed/indic_instruct_clean.jsonl"
+
