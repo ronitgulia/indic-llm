@@ -1,0 +1,42 @@
+# Indic LLM - LoRA Parameter-Efficient Fine-Tuning (PEFT) Configuration
+# =======================================================================
+# Fine-tune pre-trained checkpoints with low-rank adapters (< 1% trainable params).
+# Usage: python src/sft.py --config configs/lora_sft_config.yaml
+
+model:
+  vocab_size: 32000
+  dim: 512
+  n_layers: 8
+  n_heads: 8
+  n_kv_heads: 4
+  max_seq_len: 512
+  dropout: 0.05
+
+sft:
+  base_checkpoint: "checkpoints/step_010000.pt"
+  output_dir: "checkpoints/lora_sft"
+  batch_size: 8
+  grad_accumulation_steps: 4                     # effective batch size = 32
+  max_steps: 1000
+  learning_rate: 2.0e-4                          # LoRA allows higher learning rates than full SFT
+  min_lr: 2.0e-5
+  warmup_steps: 50
+  weight_decay: 0.01
+  grad_clip: 1.0
+  eval_every: 50
+  save_every: 200
+  keep_best_n: 3
+  log_every: 20
+  val_fraction: 0.05
+  seed: 42
+  use_amp: true
+
+  # LoRA Parameters
+  use_lora: true
+  lora_r: 8                                      # rank dimension
+  lora_alpha: 16.0                               # scaling factor
+  lora_dropout: 0.05
+
+data:
+  tokenizer_path: "data/tokenizer/indic_spm.model"
+  data_path: "data/processed/indic_instruct_clean.jsonl"

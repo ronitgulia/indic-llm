@@ -46,6 +46,11 @@ try:
 except ImportError:
     from src.model import IndicLLM, ModelConfig  # type: ignore[no-redef]
 
+try:
+    from lora import LoRAConfig, apply_lora, save_adapter
+except ImportError:
+    from src.lora import LoRAConfig, apply_lora, save_adapter  # type: ignore[no-redef]
+
 # ─────────────────────────────────────────
 # Logging setup
 # ─────────────────────────────────────────
@@ -109,6 +114,12 @@ class SFTConfig:
     use_amp: bool = True
     seed: int = 42
     num_workers: int = 0
+
+    # LoRA Parameter-Efficient Fine-Tuning
+    use_lora: bool = False
+    lora_r: int = 8
+    lora_alpha: float = 16.0
+    lora_dropout: float = 0.05
 
     # Tracking
     use_wandb: bool = False
@@ -390,6 +401,14 @@ class SFTTrainer:
                 model.num_parameters() / 1e6,
             )
 
+        if self.cfg.use_lora:
+            lora_cfg = LoRAConfig(
+                r=self.cfg.lora_r,
+                lora_alpha=self.cfg.lora_alpha,
+                lora_dropout=self.cfg.lora_dropout,
+            )
+            model = apply_lora(model, lora_cfg)
+
         return model
 
     def _build_dataloaders(self) -> Tuple[DataLoader, DataLoader]:
@@ -489,6 +508,15 @@ class SFTTrainer:
 
         self._best_checkpoints.append((val_loss, ckpt_path))
         self._best_checkpoints.sort(key=lambda x: x[0])
+
+        if self.cfg.use_lora:
+            adapter_dir = os.path.join(self.cfg.output_dir, f"adapter_step_{step:06d}")
+            lora_cfg = LoRAConfig(
+                r=self.cfg.lora_r,
+                lora_alpha=self.cfg.lora_alpha,
+                lora_dropout=self.cfg.lora_dropout,
+            )
+            save_adapter(self.model, lora_cfg, adapter_dir)
 
         while len(self._best_checkpoints) > self.cfg.keep_best_n:
             _, old_path = self._best_checkpoints.pop()
@@ -674,6 +702,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning_rate", type=float, default=None, help="Peak learning rate")
     parser.add_argument("--device", type=str, default=None, choices=["auto", "cuda", "cpu"])
     parser.add_argument("--use_wandb", action="store_true", default=None)
+    parser.add_argument("--use_lora", action="store_true", default=None, help="Train with LoRA adapters")
+    parser.add_argument("--lora_r", type=int, default=None, help="LoRA rank r")
+    parser.add_argument("--lora_alpha", type=float, default=None, help="LoRA alpha scaling factor")
     return parser.parse_args()
 
 
