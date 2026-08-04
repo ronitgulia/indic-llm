@@ -1,0 +1,39 @@
+# Indic LLM - Retrieval-Augmented Generation (RAG) Configuration
+# =============================================================
+# Hyperparameters and settings for grounding Indic LLM in external knowledge bases.
+# Usage: python src/rag.py --checkpoint checkpoints/step_010000.pt --tokenizer data/tokenizer/indic_spm.model --corpus data/knowledge.txt
+
+model:
+  checkpoint: "checkpoints/step_010000.pt"
+  tokenizer: "data/tokenizer/indic_spm.model"
+  device: "cuda"
+
+chunking:
+  chunk_size: 300            # maximum chunk length in characters
+  chunk_overlap: 50          # character overlap preserving cross-sentence context
+  split_delimiters:
+    - "।"                    # Purna Viram (U+0964)
+    - "॥"                    # Deergh Viram (U+0965)
+    - "?"
+    - "!"
+    - "\n\n"
+
+retrieval:
+  retriever_type: "hybrid"   # "bm25", "dense", or "hybrid"
+  top_k: 3                   # number of chunks injected into context
+  bm25:
+    k1: 1.5                  # term frequency saturation parameter
+    b: 0.75                  # document length normalization parameter
+  dense:
+    max_seq_len: 256
+    pooling: "mean"
+  hybrid:
+    bm25_weight: 0.5
+    dense_weight: 0.5
+    rrf_k: 60                # Reciprocal Rank Fusion constant
+
+generation:
+  max_new_tokens: 150
+  temperature: 0.3           # low temperature for factual synthesis
+  top_p: 0.9
+  system_prompt: "आप एक सहायक Indic AI हैं। केवल नीचे दिए गए संदर्भों के आधार पर प्रश्नों का सटीक और संक्षिप्त उत्तर दें।"
