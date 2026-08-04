@@ -37,3 +37,4 @@ generation:
   temperature: 0.3           # low temperature for factual synthesis
   top_p: 0.9
   system_prompt: "आप एक सहायक Indic AI हैं। केवल नीचे दिए गए संदर्भों के आधार पर प्रश्नों का सटीक और संक्षिप्त उत्तर दें।"
+

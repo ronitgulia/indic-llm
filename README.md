@@ -42,6 +42,7 @@ indic-llm/
 ├── src/
 │   ├── model.py          # Transformer architecture (GQA, RoPE, SwiGLU, KV-cache)
 │   ├── lora.py           # Low-Rank Adaptation (LoRA) PEFT & adapter merging
+│   ├── rag.py            # Indic RAG (chunker, BM25, dense, RRF hybrid retriever)
 │   ├── train.py          # Pre-training loop (AdamW, cosine LR, AMP, W&B, val loss)
 │   ├── sft.py            # Supervised fine-tuning with LoRA & prompt loss masking
 │   ├── dpo.py            # Direct Preference Optimization (DPO) alignment
@@ -68,8 +69,9 @@ indic-llm/
 │   ├── sft_config.yaml        # Instruction fine-tuning hyperparameters
 │   ├── lora_sft_config.yaml   # Parameter-efficient LoRA SFT hyperparameters
 │   ├── dpo_config.yaml        # Preference alignment hyperparameters
-│   └── eval_config.yaml       # Multi-task benchmark evaluation settings
-├── tests/                     # Comprehensive pytest test suite (44 unit tests)
+│   ├── eval_config.yaml       # Multi-task benchmark evaluation settings
+│   └── rag_config.yaml        # Indic RAG retrieval & generation settings
+├── tests/                     # Comprehensive pytest test suite (58 unit tests)
 ├── .github/workflows/
 │   └── ci.yml                 # Lint (ruff) + type-check + pytest suite
 ├── requirements.txt
@@ -235,6 +237,20 @@ python inference/serve.py \
     --port 8000
 ```
 
+### 7c — Retrieval-Augmented Generation (RAG)
+
+Ground answers in external Indic text corpora with sentence-aware chunking and citation attribution:
+
+```bash
+python src/rag.py \
+    --checkpoint checkpoints/step_010000.pt \
+    --tokenizer data/tokenizer/indic_spm.model \
+    --corpus data/knowledge.txt \
+    --query "भारत की राजधानी क्या है?" \
+    --retriever hybrid \
+    --top_k 3
+```
+
 ### 8 — Export & Quantization
 
 Export checkpoints for Hugging Face Transformers or dynamic INT8 CPU inference:
@@ -276,6 +292,7 @@ Edit `configs/train_config.yaml` to switch variants — no code changes required
 | **Monitoring** | Weights & Biases integration (optional, `--use_wandb`) |
 | **Checkpointing** | Best-N checkpoint management with metadata JSON |
 | **PEFT (LoRA)** | Low-Rank Adaptation for attention/MLP layers (< 1% trainable params) with weight merging |
+| **RAG** | Sentence-aware Devanagari chunking (।, ॥), BM25 + Dense RRF hybrid search, citation attribution |
 | **Evaluation** | Perplexity + token accuracy + BLEU/ChrF + Multi-Choice QA Benchmark Suite with Leaderboards |
 | **Tokenizer** | 32K BPE SentencePiece, Devanagari + Latin coverage |
 

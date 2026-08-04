@@ -91,3 +91,6 @@ jobs:
 
       - name: Verify Benchmark Suite imports cleanly
         run: python -c "from eval.benchmark_suite import MCQASample, evaluate_mcqa; print('benchmark OK')"
+
+      - name: Verify RAG module imports cleanly
+        run: python -c "from src.rag import IndicTextSplitter, IndicBM25Retriever, IndicRAGEngine; print('RAG OK')"
