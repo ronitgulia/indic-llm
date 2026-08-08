@@ -1,0 +1,26 @@
+# Indic LLM - Speculative Decoding Configuration
+# ===================================================
+draft_model:
+  checkpoint: "checkpoints/draft_step_010000.pt"
+  vocab_size: 32000
+  dim: 256
+  n_layers: 4
+  n_heads: 4
+  n_kv_heads: 2
+  max_seq_len: 512
+
+target_model:
+  checkpoint: "checkpoints/step_010000.pt"
+  vocab_size: 32000
+  dim: 512
+  n_layers: 8
+  n_heads: 8
+  n_kv_heads: 4
+  max_seq_len: 512
+
+speculative:
+  draft_steps: 4
+  temperature: 0.7
+  top_p: 0.9
+  max_new_tokens: 150
+  device: "cuda"
