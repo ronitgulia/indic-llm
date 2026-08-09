@@ -61,3 +61,26 @@ class SpeculativeMetrics:
     acceptance_rate: float
     total_time_sec: float
     tokens_per_second: float
+
+
+def sample_token(
+    logits: torch.Tensor,
+    temperature: float = 1.0,
+    top_p: float = 1.0,
+) -> int:
+    """Sample next token from logits with temperature and top-p filtering."""
+    if temperature <= 1e-4:
+        return int(torch.argmax(logits, dim=-1).item())
+
+    scaled = logits / max(1e-5, temperature)
+    if top_p < 1.0:
+        sorted_logits, sorted_indices = torch.sort(scaled, descending=True)
+        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+        sorted_indices_to_remove = cumulative_probs > top_p
+        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+        sorted_indices_to_remove[..., 0] = 0
+        sorted_logits[sorted_indices_to_remove] = float("-inf")
+        scaled = torch.zeros_like(scaled).scatter_(0, sorted_indices, sorted_logits)
+
+    probs = F.softmax(scaled, dim=-1)
+    return int(torch.multinomial(probs, num_samples=1).item())
