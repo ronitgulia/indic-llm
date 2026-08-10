@@ -84,3 +84,32 @@ def sample_token(
 
     probs = F.softmax(scaled, dim=-1)
     return int(torch.multinomial(probs, num_samples=1).item())
+
+
+def speculative_step(
+    p_target: torch.Tensor,
+    p_draft: torch.Tensor,
+    draft_token_id: int,
+) -> Tuple[bool, Optional[int]]:
+    """
+    Acceptance test for a single proposed draft token:
+      accept_prob = min(1.0, P_target(x) / P_draft(x))
+    """
+    p_t = p_target[draft_token_id].item()
+    p_d = max(1e-8, p_draft[draft_token_id].item())
+    alpha = min(1.0, p_t / p_d)
+
+    u = torch.rand(1).item()
+    if u <= alpha:
+        return True, None
+
+    # Rejection: sample from adjusted residual distribution max(0, P_target - P_draft)
+    residual = torch.clamp(p_target - p_draft, min=0.0)
+    res_sum = residual.sum().item()
+    if res_sum > 1e-8:
+        residual_probs = residual / res_sum
+        corrected_token = int(torch.multinomial(residual_probs, num_samples=1).item())
+    else:
+        corrected_token = int(torch.multinomial(p_target, num_samples=1).item())
+
+    return False, corrected_token
