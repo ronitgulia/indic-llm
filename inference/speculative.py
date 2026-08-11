@@ -144,3 +144,95 @@ class SpeculativeEngine:
                 probs[torch.argmax(last_logits)] = 1.0
                 return probs
             return F.softmax(last_logits / max(1e-5, temperature), dim=-1)
+
+    @torch.no_grad()
+    def generate(
+        self,
+        prompt: str,
+        config: Optional[SpeculativeConfig] = None,
+    ) -> Tuple[str, SpeculativeMetrics]:
+        cfg = config or SpeculativeConfig()
+        t_start = time.time()
+
+        prompt_tokens = self.tokenizer.encode(prompt, out_type=int)
+        bos_id = self.tokenizer.bos_id()
+        if bos_id >= 0 and (not prompt_tokens or prompt_tokens[0] != bos_id):
+            prompt_tokens = [bos_id] + prompt_tokens
+
+        eos_id = self.tokenizer.eos_id()
+        curr_seq = list(prompt_tokens)
+
+        total_draft_tokens = 0
+        accepted_tokens = 0
+        target_passes = 0
+        generated_token_ids: List[int] = []
+
+        while len(generated_token_ids) < cfg.max_new_tokens:
+            draft_tokens: List[int] = []
+            draft_probs_list: List[torch.Tensor] = []
+
+            draft_input = torch.tensor([curr_seq], dtype=torch.long, device=self.device)
+            for _ in range(cfg.draft_steps):
+                p_d = self._get_probs(self.draft_model, draft_input, cfg.temperature)
+                tok = sample_token(p_d, temperature=cfg.temperature, top_p=cfg.top_p)
+                draft_tokens.append(tok)
+                draft_probs_list.append(p_d)
+                draft_input = torch.cat(
+                    [draft_input, torch.tensor([[tok]], dtype=torch.long, device=self.device)], dim=1
+                )
+                if tok == eos_id:
+                    break
+
+            total_draft_tokens += len(draft_tokens)
+
+            target_input = torch.tensor([curr_seq + draft_tokens], dtype=torch.long, device=self.device)
+            target_logits, _ = self.target_model(target_input)
+            target_passes += 1
+
+            prefix_len = len(curr_seq)
+            all_accepted = True
+
+            for step_idx, draft_tok in enumerate(draft_tokens):
+                pos = prefix_len + step_idx - 1
+                logits_at_pos = target_logits[0, pos, :]
+                p_t = F.softmax(logits_at_pos / max(1e-5, cfg.temperature), dim=-1)
+                p_d = draft_probs_list[step_idx]
+
+                accepted, corrected = speculative_step(p_t, p_d, draft_tok)
+                if accepted:
+                    accepted_tokens += 1
+                    curr_seq.append(draft_tok)
+                    generated_token_ids.append(draft_tok)
+                    if draft_tok == eos_id or len(generated_token_ids) >= cfg.max_new_tokens:
+                        break
+                else:
+                    all_accepted = False
+                    if corrected is not None:
+                        curr_seq.append(corrected)
+                        generated_token_ids.append(corrected)
+                    break
+
+            if all_accepted and generated_token_ids and generated_token_ids[-1] != eos_id:
+                bonus_logits = target_logits[0, prefix_len + len(draft_tokens) - 1, :]
+                bonus_tok = sample_token(bonus_logits, temperature=cfg.temperature, top_p=cfg.top_p)
+                curr_seq.append(bonus_tok)
+                generated_token_ids.append(bonus_tok)
+
+            if generated_token_ids and generated_token_ids[-1] == eos_id:
+                break
+
+        total_time = max(1e-4, time.time() - t_start)
+        gen_text = self.tokenizer.decode(generated_token_ids)
+        acc_rate = (accepted_tokens / max(1, total_draft_tokens)) * 100.0
+        tok_s = len(generated_token_ids) / total_time
+
+        metrics = SpeculativeMetrics(
+            tokens_generated=len(generated_token_ids),
+            draft_tokens_proposed=total_draft_tokens,
+            accepted_tokens=accepted_tokens,
+            target_forward_passes=target_passes,
+            acceptance_rate=round(acc_rate, 2),
+            total_time_sec=round(total_time, 4),
+            tokens_per_second=round(tok_s, 2),
+        )
+        return gen_text, metrics
