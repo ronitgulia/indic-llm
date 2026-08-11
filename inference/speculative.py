@@ -113,3 +113,34 @@ def speculative_step(
         corrected_token = int(torch.multinomial(p_target, num_samples=1).item())
 
     return False, corrected_token
+
+
+class SpeculativeEngine:
+    """
+    Coordinates speculative decoding between draft and target IndicLLM instances.
+    """
+
+    def __init__(
+        self,
+        target_model: IndicLLM,
+        draft_model: IndicLLM,
+        tokenizer: spm.SentencePieceProcessor,
+        device: Optional[torch.device] = None,
+    ):
+        self.target_model = target_model
+        self.draft_model = draft_model
+        self.tokenizer = tokenizer
+        self.device = device or next(target_model.parameters()).device
+
+        self.target_model.eval().to(self.device)
+        self.draft_model.eval().to(self.device)
+
+    def _get_probs(self, model: IndicLLM, input_ids: torch.Tensor, temperature: float = 1.0) -> torch.Tensor:
+        with torch.no_grad():
+            logits, _ = model(input_ids)
+            last_logits = logits[0, -1, :]
+            if temperature <= 1e-4:
+                probs = torch.zeros_like(last_logits)
+                probs[torch.argmax(last_logits)] = 1.0
+                return probs
+            return F.softmax(last_logits / max(1e-5, temperature), dim=-1)
