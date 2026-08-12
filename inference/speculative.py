@@ -236,3 +236,8 @@ class SpeculativeEngine:
             tokens_per_second=round(tok_s, 2),
         )
         return gen_text, metrics
+
+
+def compute_speculative_speedup(standard_tok_per_sec: float, spec_tok_per_sec: float) -> float:
+    """Compute empirical inference acceleration factor."""
+    return round(spec_tok_per_sec / max(1e-5, standard_tok_per_sec), 2)
