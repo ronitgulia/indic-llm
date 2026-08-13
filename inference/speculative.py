@@ -241,3 +241,59 @@ class SpeculativeEngine:
 def compute_speculative_speedup(standard_tok_per_sec: float, spec_tok_per_sec: float) -> float:
     """Compute empirical inference acceleration factor."""
     return round(spec_tok_per_sec / max(1e-5, standard_tok_per_sec), 2)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Indic LLM Speculative Decoding CLI")
+    parser.add_argument("--target_checkpoint", type=str, required=True, help="Path to target model .pt")
+    parser.add_argument("--draft_checkpoint", type=str, required=True, help="Path to draft model .pt")
+    parser.add_argument("--tokenizer", type=str, required=True, help="Path to SentencePiece model")
+    parser.add_argument("--prompt", type=str, default="भारत की राजधानी क्या है?")
+    parser.add_argument("--draft_steps", type=int, default=4, help="Draft lookahead tokens")
+    parser.add_argument("--max_new_tokens", type=int, default=100)
+    parser.add_argument("--temperature", type=float, default=0.7)
+    parser.add_argument("--top_p", type=float, default=0.9)
+    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+
+    args = parser.parse_args()
+    device = torch.device(args.device)
+
+    tokenizer = spm.SentencePieceProcessor()
+    tokenizer.load(args.tokenizer)
+
+    def load_ckpt(path: str) -> IndicLLM:
+        ckpt = torch.load(path, map_location=device)
+        rc = ckpt.get("config", {})
+        mc = ModelConfig(
+            vocab_size=rc.get("vocab_size", 32000),
+            dim=rc.get("model_dim", 512),
+            n_layers=rc.get("n_layers", 8),
+            n_heads=rc.get("n_heads", 8),
+            n_kv_heads=rc.get("n_kv_heads", 4),
+            max_seq_len=rc.get("max_seq_len", 512),
+            dropout=0.0,
+        )
+        m = IndicLLM(mc).to(device)
+        m.load_state_dict(ckpt["model_state_dict"])
+        m.eval()
+        return m
+
+    target_m = load_ckpt(args.target_checkpoint)
+    draft_m = load_ckpt(args.draft_checkpoint)
+
+    engine = SpeculativeEngine(target_m, draft_m, tokenizer, device=device)
+    cfg = SpeculativeConfig(
+        draft_steps=args.draft_steps,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        max_new_tokens=args.max_new_tokens,
+    )
+
+    print(f"\nPrompt: {args.prompt}")
+    text, metrics = engine.generate(args.prompt, cfg)
+    print(f"Generated: {text}\n")
+    print(f"Metrics: {metrics}")
+
+
+if __name__ == "__main__":
+    main()
