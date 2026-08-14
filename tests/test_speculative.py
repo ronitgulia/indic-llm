@@ -72,3 +72,14 @@ def test_speculative_engine_generation():
     assert metrics.tokens_generated > 0
     assert metrics.target_forward_passes > 0
     assert 0.0 <= metrics.acceptance_rate <= 100.0
+
+
+def test_sample_token_greedy():
+    logits = torch.tensor([1.0, 5.0, 2.0])
+    token = sample_token(logits, temperature=0.0)
+    assert token == 1
+
+
+def test_compute_speculative_speedup():
+    speedup = compute_speculative_speedup(20.0, 50.0)
+    assert speedup == 2.5
