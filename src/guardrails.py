@@ -73,3 +73,23 @@ def validate_verhoeff(num_str: str) -> bool:
     for i, digit in enumerate(reversed(num_str)):
         c = VERHOEFF_D[c][VERHOEFF_P[i % 8][int(digit)]]
     return c == 0
+
+
+class ToxicityClassifier:
+    """Detects abusive, defamatory, or profane Devanagari and Hinglish expressions."""
+
+    PROFANITY_LEXICON = {
+        "गाली", "बकवास", "हरामी", "कुत्ता", "कमीना", "नालायक", "गधा", "बेवकूफ", "पागल",
+        "धूर्त", "दुष्ट", "हिंसा", "विद्वेष", "अपराध"
+    }
+
+    def __init__(self, custom_words: Optional[set[str]] = None):
+        self.lexicon = set(self.PROFANITY_LEXICON)
+        if custom_words:
+            self.lexicon.update(custom_words)
+
+    def analyze(self, text: str) -> Tuple[float, List[str]]:
+        words = re.findall(r"[\w\u0900-\u097F]+", text.lower())
+        flagged = [w for w in words if w in self.lexicon]
+        score = min(1.0, len(flagged) / max(1, len(words)) * 5.0)
+        return score, flagged
