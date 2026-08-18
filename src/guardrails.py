@@ -93,3 +93,40 @@ class ToxicityClassifier:
         flagged = [w for w in words if w in self.lexicon]
         score = min(1.0, len(flagged) / max(1, len(words)) * 5.0)
         return score, flagged
+
+
+class PIIMasker:
+    """Identifies and redacts sensitive Indian personal identifying information."""
+
+    AADHAAR_REGEX = re.compile(r"\b[2-9]\d{3}[\s\-]?\d{4}[\s\-]?\d{4}\b")
+    PAN_REGEX = re.compile(r"\b[A-Z]{5}[0-9]{4}[A-Z]\b")
+    PHONE_REGEX = re.compile(r"(?:\+91[\-\s]?)?[6-9]\d{9}\b")
+    EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
+
+    def mask(self, text: str) -> Tuple[str, List[PIIMatch]]:
+        matches: List[PIIMatch] = []
+        masked_text = text
+
+        for m in self.AADHAAR_REGEX.finditer(text):
+            val = m.group(0)
+            digits = re.sub(r"\D", "", val)
+            if len(digits) == 12:
+                matches.append(PIIMatch(PIIType.AADHAAR, val, m.start(), m.end(), "[आधार संख्या]"))
+                masked_text = masked_text.replace(val, "[आधार संख्या]")
+
+        for m in self.PAN_REGEX.finditer(text):
+            val = m.group(0)
+            matches.append(PIIMatch(PIIType.PAN, val, m.start(), m.end(), "[पैन कार्ड]"))
+            masked_text = masked_text.replace(val, "[पैन कार्ड]")
+
+        for m in self.PHONE_REGEX.finditer(text):
+            val = m.group(0)
+            matches.append(PIIMatch(PIIType.PHONE, val, m.start(), m.end(), "[फोन नंबर]"))
+            masked_text = masked_text.replace(val, "[फोन नंबर]")
+
+        for m in self.EMAIL_REGEX.finditer(text):
+            val = m.group(0)
+            matches.append(PIIMatch(PIIType.EMAIL, val, m.start(), m.end(), "[ईमेल]"))
+            masked_text = masked_text.replace(val, "[ईमेल]")
+
+        return masked_text, matches
