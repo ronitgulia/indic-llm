@@ -130,3 +130,23 @@ class PIIMasker:
             masked_text = masked_text.replace(val, "[ईमेल]")
 
         return masked_text, matches
+
+
+class PromptInjectionDetector:
+    """Flags adversarial prompt injections and jailbreaks in Indic & English prompts."""
+
+    INJECTION_PATTERNS = [
+        re.compile(r"ignore\s+(?:all\s+)?previous\s+instructions", re.IGNORECASE),
+        re.compile(r"disregard\s+(?:all\s+)?prior\s+rules", re.IGNORECASE),
+        re.compile(r"you\s+are\s+now\s+in\s+(?:developer|dan|unrestricted)\s+mode", re.IGNORECASE),
+        re.compile(r"(?:पिछले|सभी)\s+निर्देश(?:ों)?\s+को\s+(?:भूल|अनदेखा|त्याग)", re.IGNORECASE),
+        re.compile(r"सिस्टम\s+प्रॉम्प्ट\s+(?:दिखाओ|बताओ|उजागर)", re.IGNORECASE),
+        re.compile(r"नियमों\s+को\s+तोड़ो", re.IGNORECASE),
+    ]
+
+    def detect(self, text: str) -> Tuple[bool, List[str]]:
+        flagged: List[str] = []
+        for pat in self.INJECTION_PATTERNS:
+            if pat.search(text):
+                flagged.append(pat.pattern)
+        return len(flagged) > 0, flagged
