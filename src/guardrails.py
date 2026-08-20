@@ -150,3 +150,77 @@ class PromptInjectionDetector:
             if pat.search(text):
                 flagged.append(pat.pattern)
         return len(flagged) > 0, flagged
+
+
+@dataclass
+class GuardrailResult:
+    is_safe: bool
+    sanitized_text: str
+    flagged_reasons: List[str] = field(default_factory=list)
+    pii_redacted: List[PIIMatch] = field(default_factory=list)
+    toxicity_score: float = 0.0
+
+
+class IndicGuardrails:
+    """Comprehensive input and output safety middleware."""
+
+    def __init__(
+        self,
+        toxicity_threshold: float = 0.5,
+        enable_pii_masking: bool = True,
+        enable_injection_detection: bool = True,
+    ):
+        self.toxicity_threshold = toxicity_threshold
+        self.enable_pii_masking = enable_pii_masking
+        self.enable_injection_detection = enable_injection_detection
+
+        self.pii_masker = PIIMasker()
+        self.toxicity_classifier = ToxicityClassifier()
+        self.injection_detector = PromptInjectionDetector()
+
+    def process_input(self, text: str) -> GuardrailResult:
+        reasons: List[str] = []
+        sanitized = text
+        pii_matches: List[PIIMatch] = []
+
+        if self.enable_injection_detection:
+            has_injection, patts = self.injection_detector.detect(text)
+            if has_injection:
+                reasons.append("PROMPT_INJECTION_DETECTED")
+
+        tox_score, flagged_words = self.toxicity_classifier.analyze(text)
+        if tox_score >= self.toxicity_threshold:
+            reasons.append(f"TOXIC_CONTENT (score={tox_score:.2f})")
+
+        if self.enable_pii_masking:
+            sanitized, pii_matches = self.pii_masker.mask(sanitized)
+
+        is_safe = len(reasons) == 0
+        return GuardrailResult(
+            is_safe=is_safe,
+            sanitized_text=sanitized,
+            flagged_reasons=reasons,
+            pii_redacted=pii_matches,
+            toxicity_score=tox_score,
+        )
+
+    def process_output(self, text: str) -> GuardrailResult:
+        reasons: List[str] = []
+        sanitized = text
+        pii_matches: List[PIIMatch] = []
+
+        tox_score, flagged_words = self.toxicity_classifier.analyze(text)
+        if tox_score >= self.toxicity_threshold:
+            reasons.append(f"TOXIC_CONTENT (score={tox_score:.2f})")
+
+        if self.enable_pii_masking:
+            sanitized, pii_matches = self.pii_masker.mask(sanitized)
+
+        is_safe = len(reasons) == 0
+        return GuardrailResult(
+            is_safe=is_safe,
+            sanitized_text=sanitized,
+            flagged_reasons=reasons,
+            pii_redacted=pii_matches,
+            toxicity_score=tox_score,
+        )
