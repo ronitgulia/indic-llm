@@ -36,3 +36,16 @@ def test_pii_masker_entities():
     assert "[फोन नंबर]" in masked
     assert "[ईमेल]" in masked
     assert len(matches) == 3
+
+
+def test_toxicity_classifier():
+    clf = ToxicityClassifier()
+    clean_text = "भारत एक प्राचीन और सुंदर देश है।"
+    score_clean, flagged_clean = clf.analyze(clean_text)
+    assert score_clean == 0.0
+    assert len(flagged_clean) == 0
+
+    abusive_text = "यह सब बकवास और गाली है।"
+    score_abuse, flagged_abuse = clf.analyze(abusive_text)
+    assert score_abuse > 0.0
+    assert "बकवास" in flagged_abuse
