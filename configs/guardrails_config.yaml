@@ -1,0 +1,17 @@
+# Indic LLM - Safety & Guardrails Configuration
+# =================================================
+safety:
+  enabled: true
+  toxicity_threshold: 0.4
+  pii_redaction:
+    enabled: true
+    mask_aadhaar: true
+    mask_pan: true
+    mask_phone: true
+    mask_email: true
+  injection_detection:
+    enabled: true
+    block_on_detection: true
+  custom_banned_words:
+    - "प्रतिबंधित"
+    - "अवैध"
