@@ -65,3 +65,55 @@ def detect_script(text: str) -> ScriptType:
     if sorted_counts[0][1] > 0:
         return sorted_counts[0][0]
     return ScriptType.UNKNOWN
+
+
+ROMAN_TO_DEV_MAP = {
+    "aa": "ा", "ee": "ी", "oo": "ू", "ai": "ै", "au": "ौ",
+    "kh": "ख", "gh": "घ", "ch": "च", "chh": "छ", "jh": "झ",
+    "th": "थ", "dh": "ध", "ph": "फ", "bh": "भ", "sh": "श",
+    "k": "क", "g": "ग", "j": "ज", "t": "त", "d": "द",
+    "n": "न", "p": "प", "b": "ब", "m": "म", "y": "य",
+    "r": "र", "l": "ल", "v": "व", "w": "व", "s": "स",
+    "h": "ह", "a": "", "i": "ि", "u": "ु", "e": "े", "o": "ो",
+}
+
+ROMAN_INITIAL_VOWELS = {
+    "aa": "आ", "ee": "ई", "oo": "ऊ", "ai": "ऐ", "au": "औ",
+    "a": "अ", "i": "इ", "u": "उ", "e": "ए", "o": "ओ",
+}
+
+
+def roman_to_devanagari(text: str) -> str:
+    words = text.split()
+    converted_words = []
+
+    for word in words:
+        clean_w = word.lower()
+        res = ""
+        idx = 0
+        w_len = len(clean_w)
+        is_first = True
+
+        while idx < w_len:
+            matched = False
+            for l in (3, 2, 1):
+                sub = clean_w[idx : idx + l]
+                if is_first and sub in ROMAN_INITIAL_VOWELS:
+                    res += ROMAN_INITIAL_VOWELS[sub]
+                    idx += l
+                    matched = True
+                    is_first = False
+                    break
+                elif sub in ROMAN_TO_DEV_MAP:
+                    res += ROMAN_TO_DEV_MAP[sub]
+                    idx += l
+                    matched = True
+                    is_first = False
+                    break
+            if not matched:
+                res += clean_w[idx]
+                idx += 1
+                is_first = False
+        converted_words.append(res)
+
+    return " ".join(converted_words)
