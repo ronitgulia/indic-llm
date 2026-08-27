@@ -117,3 +117,36 @@ def roman_to_devanagari(text: str) -> str:
         converted_words.append(res)
 
     return " ".join(converted_words)
+
+
+SCRIPT_OFFSETS = {
+    ScriptType.DEVANAGARI: 0x00,
+    ScriptType.BENGALI: 0x80,
+    ScriptType.GURMUKHI: 0x100,
+    ScriptType.GUJARATI: 0x180,
+    ScriptType.TAMIL: 0x280,
+    ScriptType.TELUGU: 0x300,
+    ScriptType.KANNADA: 0x380,
+    ScriptType.MALAYALAM: 0x400,
+}
+
+
+def devanagari_to_script(text: str, target_script: ScriptType) -> str:
+    if target_script == ScriptType.DEVANAGARI or target_script not in SCRIPT_OFFSETS:
+        return text
+
+    offset = SCRIPT_OFFSETS[target_script]
+    converted = []
+
+    for ch in text:
+        cp = ord(ch)
+        if 0x0900 <= cp <= 0x097F:
+            target_cp = cp + offset
+            try:
+                converted.append(chr(target_cp))
+            except ValueError:
+                converted.append(ch)
+        else:
+            converted.append(ch)
+
+    return "".join(converted)
