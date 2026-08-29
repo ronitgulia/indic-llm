@@ -28,3 +28,13 @@ def test_detect_script():
     assert detect_script("भारत एक महान देश है") == ScriptType.DEVANAGARI
     assert detect_script("আমার সোনার বাংলা") == ScriptType.BENGALI
     assert detect_script("Hello world") == ScriptType.LATIN
+
+
+def test_roman_to_devanagari():
+    res = roman_to_devanagari("bharat")
+    assert "भ" in res
+    assert "र" in res
+    assert "त" in res
+
+    res2 = roman_to_devanagari("namaste")
+    assert "न" in res2
