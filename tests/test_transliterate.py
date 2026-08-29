@@ -38,3 +38,12 @@ def test_roman_to_devanagari():
 
     res2 = roman_to_devanagari("namaste")
     assert "न" in res2
+
+
+def test_devanagari_to_script():
+    dev_text = "भारत"
+    bengali_text = devanagari_to_script(dev_text, ScriptType.BENGALI)
+    assert detect_script(bengali_text) == ScriptType.BENGALI
+
+    gujarati_text = devanagari_to_script(dev_text, ScriptType.GUJARATI)
+    assert detect_script(gujarati_text) == ScriptType.GUJARATI
