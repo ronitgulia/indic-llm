@@ -150,3 +150,26 @@ def devanagari_to_script(text: str, target_script: ScriptType) -> str:
             converted.append(ch)
 
     return "".join(converted)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Indic LLM Multi-Script Transliteration CLI")
+    parser.add_argument("--text", type=str, required=True, help="Input text")
+    parser.add_argument("--to_devanagari", action="store_true", help="Convert Romanized Hinglish to Devanagari")
+    parser.add_argument("--to_script", type=str, choices=[s.value for s in ScriptType], default=None)
+
+    args = parser.parse_args()
+    script = detect_script(args.text)
+    print(f"Detected script: {script.value}")
+
+    if args.to_devanagari:
+        res = roman_to_devanagari(args.text)
+        print(f"Devanagari: {res}")
+    elif args.to_script:
+        target = ScriptType(args.to_script)
+        res = devanagari_to_script(args.text, target)
+        print(f"{target.value}: {res}")
+
+
+if __name__ == "__main__":
+    main()
