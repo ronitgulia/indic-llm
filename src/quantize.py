@@ -107,3 +107,24 @@ class WeightOnlyInt4Linear(nn.Module):
 
         w_fp = unpacked * self.scale
         return torch.nn.functional.linear(x, w_fp, self.bias)
+
+
+def quantize_model_weights(model: IndicLLM, bits: int = 8) -> IndicLLM:
+    if bits not in (4, 8):
+        raise ValueError(f"Unsupported bit width: {bits}. Must be 4 or 8.")
+
+    quant_cls = WeightOnlyInt8Linear if bits == 8 else WeightOnlyInt4Linear
+    converted = 0
+
+    for layer in model.layers:
+        for container in (layer.attn, layer.ffn):
+            for attr in ("wq", "wk", "wv", "wo", "w1", "w2", "w3"):
+                if hasattr(container, attr):
+                    orig_mod = getattr(container, attr)
+                    if isinstance(orig_mod, nn.Linear):
+                        q_mod = quant_cls.from_float(orig_mod)
+                        setattr(container, attr, q_mod)
+                        converted += 1
+
+    log.info("Quantized %d linear layers to INT%d", converted, bits)
+    return model
