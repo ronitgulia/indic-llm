@@ -1,0 +1,28 @@
+# Indic Synthetic Instruction Evolution Configuration
+seed: 42
+batch_size: 16
+target_languages:
+  - hi
+  - bn
+  - ta
+  - te
+  - gu
+  - mr
+
+mutation_distribution:
+  concretize: 0.35
+  deepen_constraints: 0.25
+  increase_reasoning_steps: 0.25
+  multilingual_cross_lingual: 0.15
+
+filtering:
+  min_instruction_chars: 15
+  max_instruction_chars: 500
+  min_response_chars: 30
+  max_response_chars: 2000
+  max_ngram_repetition_ratio: 0.30
+  min_quality_score: 0.70
+
+output:
+  format: "jsonl"
+  path: "data/synthetic_samples.jsonl"
