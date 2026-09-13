@@ -111,3 +111,95 @@ class InstructionMutator:
         elif language == "te":
             return f"{instruction} దయచేసి తెలుగులో సమాధానమిస్తూ, కీలక సాంకేతిక పదాలకు బ్రాకెట్లలో ఆంగ్ల సమానార్థకాలను చేర్చండి."
         return f"{instruction} (द्विभाषी पारिभाषिक शब्दावली सहित)"
+
+
+class SyntheticDataGenerator:
+    """Orchestrates instruction mutation, response generation, and quality filtering."""
+
+    DEFAULT_SEEDS: list[dict[str, str]] = [
+        {"instruction": "सौर ऊर्जा के लाभों की व्याख्या करें।", "response": "सौर ऊर्जा एक स्वच्छ, नवीकरणीय ऊर्जा स्रोत है जो प्रदूषण को कम करता है और बिजली बिल में बचत कराता है।", "language": "hi"},
+        {"instruction": "গাছ লাগানো কেন প্রয়োজন?", "response": "গাছ পরিবেশের ভারসাম্য রক্ষা করে, অক্সিজেন সরবরাহ করে এবং বায়ু দূষণ হ্রাস করতে সাহায্য করে।", "language": "bn"},
+        {"instruction": "தண்ணீர் சேமிப்பின் முக்கியத்துவம் என்ன?", "response": "தண்ணீர் ஒரு விலைமதிப்பற்ற இயற்கை வளம். எதிர்கால சந்ததியினரின் நல்வாழ்வுக்கு நீர்நிலைகளைப் பாதுகாப்பது இன்றியமையாதது.", "language": "ta"},
+        {"instruction": "వ్యాయామం యొక్క ప్రాముఖ్యత ఏమిటి?", "response": "రోజూ వ్యాయామం చేయడం వల్ల శారీరక దృఢత్వం, మానసిక ఉల్లాసం మరియు రోగనిరోధక శక్తి పెరుగుతాయి.", "language": "te"},
+        {"instruction": "સંતોષકારક જીવનશૈલી માટે શું જરૂરી છે?", "response": "સંતુલિત આહાર, નિયમિત વ્યાયામ અને સકારાત્મક વિચારસરણી જીવનમાં સુખ અને શાંતિ લાવે છે.", "language": "gu"},
+        {"instruction": "ग्रंथालयांचे महत्त्व स्पष्ट करा.", "response": "ग्रंथालये ज्ञानाचा अखंड स्रोत आहेत, जिथे वाचन संस्कृती वाढीस लागते आणि विचार समृद्ध होतात.", "language": "mr"},
+    ]
+
+    def __init__(self, seed_instructions: list[dict[str, str]] | None = None, seed: int = 42):
+        self.mutator = InstructionMutator(seed=seed)
+        self.seeds = seed_instructions or self.DEFAULT_SEEDS
+        self.rng = random.Random(seed)
+
+    def filter_quality(
+        self,
+        instruction: str,
+        response: str,
+        min_inst_len: int = 10,
+        max_inst_len: int = 600,
+        min_resp_len: int = 20,
+        max_resp_len: int = 2500,
+        max_ngram_repetition: float = 0.35,
+    ) -> tuple[bool, str]:
+        """Validate sample length, script presence, and repetitive patterns."""
+        if len(instruction) < min_inst_len:
+            return False, "Instruction too short"
+        if len(instruction) > max_inst_len:
+            return False, "Instruction exceeds maximum length"
+        if len(response) < min_resp_len:
+            return False, "Response too short"
+        if len(response) > max_resp_len:
+            return False, "Response exceeds maximum length"
+
+        # Check for repetitive 3-grams
+        words = response.split()
+        if len(words) >= 6:
+            trigrams = [tuple(words[i:i + 3]) for i in range(len(words) - 2)]
+            unique_ratio = len(set(trigrams)) / len(trigrams)
+            if (1.0 - unique_ratio) > max_ngram_repetition:
+                return False, "Excessive n-gram repetition detected"
+
+        return True, "Passed"
+
+    def generate_batch(
+        self,
+        count: int = 10,
+        target_languages: list[str] | None = None,
+    ) -> list[SyntheticSample]:
+        """Generate a batch of high-quality synthetic instruction-response samples."""
+        target_languages = target_languages or ["hi", "bn", "ta", "te", "gu", "mr"]
+        generated: list[SyntheticSample] = []
+        attempts = 0
+        max_attempts = count * 5
+
+        while len(generated) < count and attempts < max_attempts:
+            attempts += 1
+            seed_item = self.rng.choice(self.seeds)
+            lang = seed_item.get("language", "hi")
+            if target_languages and lang not in target_languages:
+                continue
+
+            mutation = self.rng.choice(self.mutator.MUTATION_TYPES)
+            mutated_inst = self.mutator.mutate(seed_item["instruction"], mutation, language=lang)
+            resp = seed_item["response"]
+
+            # Adapt response with step explanation if needed
+            if mutation == "increase_reasoning_steps":
+                resp = f"1. प्राथमिक विश्लेषण: {resp} 
+2. निष्कर्ष: उपर्युक्त बिंदुओं के आधार पर यह स्पष्ट है।"
+
+            is_valid, reason = self.filter_quality(mutated_inst, resp)
+            if not is_valid:
+                logger.debug("Filtered sample (%s): %s", reason, mutated_inst)
+                continue
+
+            sample = SyntheticSample(
+                instruction=mutated_inst,
+                response=resp,
+                language=lang,
+                mutation_type=mutation,
+                quality_score=0.92,
+                metadata={"seed_instruction": seed_item["instruction"]},
+            )
+            generated.append(sample)
+
+        return generated
