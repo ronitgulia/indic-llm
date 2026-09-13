@@ -51,3 +51,25 @@ def test_instruction_mutator_multilingual():
     # Tamil
     ta_mut = mutator.mutate("வானிலை அறிக்கை", "deepen_constraints", language="ta")
     assert "முக்கிய குறிப்புகள்" in ta_mut
+
+
+def test_synthetic_generator_batch():
+    generator = SyntheticDataGenerator(seed=42)
+    batch = generator.generate_batch(count=6, target_languages=["hi", "bn"])
+    assert len(batch) == 6
+    assert all(s.language in ["hi", "bn"] for s in batch)
+    assert all(s.quality_score >= 0.70 for s in batch)
+
+
+def test_quality_filter_bounds():
+    generator = SyntheticDataGenerator(seed=42)
+    # Too short
+    ok, reason = generator.filter_quality("छोटा", "उत्तर")
+    assert not ok
+    assert "short" in reason.lower()
+
+    # Repetition check
+    repetitive_text = "बार बार बार बार बार बार बार बार बार बार बार बार बार बार बार बार बार बार"
+    ok, reason = generator.filter_quality("यह एक परीक्षण निर्देश है?", repetitive_text)
+    assert not ok
+    assert "repetition" in reason.lower()
