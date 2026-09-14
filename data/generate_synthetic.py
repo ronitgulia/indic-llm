@@ -203,3 +203,28 @@ class SyntheticDataGenerator:
             generated.append(sample)
 
         return generated
+
+
+    @staticmethod
+    def export_jsonl(samples: list[SyntheticSample], output_path: str | Path) -> int:
+        """Export samples to a JSONL file, returning the count of lines written."""
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        count = 0
+        with open(path, "w", encoding="utf-8") as f:
+            for s in samples:
+                f.write(json.dumps(s.to_dict(), ensure_ascii=False) + "\n")
+                count += 1
+        return count
+
+    @staticmethod
+    def load_jsonl(input_path: str | Path) -> list[SyntheticSample]:
+        """Load synthetic samples from a JSONL file."""
+        samples: list[SyntheticSample] = []
+        path = Path(input_path)
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    d = json.loads(line)
+                    samples.append(SyntheticSample(**d))
+        return samples
