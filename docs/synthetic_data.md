@@ -11,3 +11,16 @@ High-quality instruction tuning for Indic languages is challenged by the scarcit
 - **Deepening Constraints:** Adds multi-part output constraints (e.g. 3-point breakdown, definitions, structured summary).
 - **Reasoning Expansion:** Directs the model towards step-by-step logical decomposition (Chain-of-Thought).
 - **Cross-Lingual Synthesis:** Prompts the generation of native text annotated with English technical counterparts.
+
+
+## 3. Dataset Generation Tutorial
+To generate a batch of synthetic samples using the CLI:
+```bash
+python data/generate_synthetic.py --count 100 --languages hi bn ta te --output data/synthetic_100.jsonl
+```
+
+### Configuration Options
+See `configs/synthetic_config.yaml` for parameters:
+- `mutation_distribution`: Relative probabilities for each mutation type.
+- `filtering.max_ngram_repetition_ratio`: Rejection threshold for repetitive degeneration.
+- `filtering.min_quality_score`: Minimum automated quality score.
