@@ -228,3 +228,26 @@ class SyntheticDataGenerator:
                     d = json.loads(line)
                     samples.append(SyntheticSample(**d))
         return samples
+
+
+    @staticmethod
+    def deduplicate(samples: list[SyntheticSample], threshold: float = 0.80) -> list[SyntheticSample]:
+        """Deduplicate samples based on instruction word overlap (Jaccard similarity)."""
+        unique: list[SyntheticSample] = []
+        token_sets: list[set[str]] = []
+
+        for sample in samples:
+            tokens = set(re.findall(r"\w+", sample.instruction.lower()))
+            if not tokens:
+                continue
+            is_dup = False
+            for prev_tokens in token_sets:
+                sim = len(tokens & prev_tokens) / len(tokens | prev_tokens)
+                if sim >= threshold:
+                    is_dup = True
+                    break
+            if not is_dup:
+                unique.append(sample)
+                token_sets.append(tokens)
+
+        return unique
