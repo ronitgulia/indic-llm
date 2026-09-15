@@ -73,3 +73,27 @@ def test_quality_filter_bounds():
     ok, reason = generator.filter_quality("यह एक परीक्षण निर्देश है?", repetitive_text)
     assert not ok
     assert "repetition" in reason.lower()
+
+
+def test_deduplication():
+    s1 = SyntheticSample("भारत की राजधानी नई दिल्ली है।", "उत्तर", "hi", "seed")
+    s2 = SyntheticSample("भारत की राजधानी नई दिल्ली है।", "भिन्न उत्तर", "hi", "seed")
+    s3 = SyntheticSample("प्राकृतिक आपदा प्रबंधन पर निबंध लिखें।", "उत्तर", "hi", "seed")
+    unique = SyntheticDataGenerator.deduplicate([s1, s2, s3], threshold=0.7)
+    assert len(unique) == 2
+    assert unique[0].instruction == s1.instruction
+    assert unique[1].instruction == s3.instruction
+
+
+def test_jsonl_export_import(tmp_path):
+    p = tmp_path / "test_synth.jsonl"
+    samples = [
+        SyntheticSample("प्रश्न एक", "उत्तर एक", "hi", "seed"),
+        SyntheticSample("প্রশ্ন দুই", "উত্তর দুই", "bn", "seed"),
+    ]
+    count = SyntheticDataGenerator.export_jsonl(samples, p)
+    assert count == 2
+    loaded = SyntheticDataGenerator.load_jsonl(p)
+    assert len(loaded) == 2
+    assert loaded[0].instruction == "प्रश्न एक"
+    assert loaded[1].language == "bn"
