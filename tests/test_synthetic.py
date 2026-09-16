@@ -97,3 +97,13 @@ def test_jsonl_export_import(tmp_path):
     assert len(loaded) == 2
     assert loaded[0].instruction == "प्रश्न एक"
     assert loaded[1].language == "bn"
+
+
+def test_cross_lingual_synthesizer():
+    from data.generate_synthetic import CrossLingualSynthesizer
+    syn = CrossLingualSynthesizer(seed=42)
+    en_q = "Explain how neural network optimization uses gradient descent."
+    en_orig, hi_synth = syn.synthesize_pair(en_q, domain="machine_learning")
+    assert en_orig == en_q
+    assert "तंत्रिका तंत्र" in hi_synth
+    assert "प्रवणता अवतरण" in hi_synth
