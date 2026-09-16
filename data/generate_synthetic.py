@@ -251,3 +251,33 @@ class SyntheticDataGenerator:
                 token_sets.append(tokens)
 
         return unique
+
+
+class CrossLingualSynthesizer:
+    """Generates aligned bilingual instruction pairs from English-Indic parallel contexts."""
+
+    DOMAIN_GLOSSARY: dict[str, dict[str, str]] = {
+        "machine_learning": {
+            "neural network": "तंत्रिका तंत्र (Neural Network)",
+            "gradient descent": "प्रवणता अवतरण (Gradient Descent)",
+            "loss function": "हानि फलन (Loss Function)",
+            "attention mechanism": "अटेंशन तंत्र (Attention Mechanism)",
+        },
+        "governance": {
+            "constitution": "संविधान (Constitution)",
+            "fundamental rights": "मौलिक अधिकार (Fundamental Rights)",
+            "judiciary": "न्यायपालिका (Judiciary)",
+            "parliament": "संसद (Parliament)",
+        },
+    }
+
+    def __init__(self, seed: int = 42):
+        self.rng = random.Random(seed)
+
+    def synthesize_pair(self, en_instruction: str, domain: str = "machine_learning") -> tuple[str, str]:
+        """Translate key concepts into Indic terms while retaining English context."""
+        glossary = self.DOMAIN_GLOSSARY.get(domain, self.DOMAIN_GLOSSARY["machine_learning"])
+        hi_inst = en_instruction
+        for en_term, hi_term in glossary.items():
+            hi_inst = re.sub(rf"\b{en_term}\b", hi_term, hi_inst, flags=re.IGNORECASE)
+        return en_instruction, hi_inst
