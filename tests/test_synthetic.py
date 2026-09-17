@@ -107,3 +107,19 @@ def test_cross_lingual_synthesizer():
     assert en_orig == en_q
     assert "तंत्रिका तंत्र" in hi_synth
     assert "प्रवणता अवतरण" in hi_synth
+
+
+def test_stratified_sample():
+    samples = [
+        SyntheticSample("h1", "r1", "hi", "s"),
+        SyntheticSample("h2", "r2", "hi", "s"),
+        SyntheticSample("h3", "r3", "hi", "s"),
+        SyntheticSample("b1", "r1", "bn", "s"),
+        SyntheticSample("b2", "r2", "bn", "s"),
+    ]
+    balanced = SyntheticDataGenerator.stratified_sample(samples, samples_per_lang=2)
+    assert len(balanced) == 4
+    hi_count = sum(1 for s in balanced if s.language == "hi")
+    bn_count = sum(1 for s in balanced if s.language == "bn")
+    assert hi_count == 2
+    assert bn_count == 2
