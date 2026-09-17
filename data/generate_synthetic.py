@@ -281,3 +281,19 @@ class CrossLingualSynthesizer:
         for en_term, hi_term in glossary.items():
             hi_inst = re.sub(rf"\b{en_term}\b", hi_term, hi_inst, flags=re.IGNORECASE)
         return en_instruction, hi_inst
+
+
+    @staticmethod
+    def stratified_sample(
+        samples: list[SyntheticSample],
+        samples_per_lang: int = 2,
+    ) -> list[SyntheticSample]:
+        """Balance generated dataset across languages with stratified extraction."""
+        by_lang: dict[str, list[SyntheticSample]] = {}
+        for s in samples:
+            by_lang.setdefault(s.language, []).append(s)
+
+        stratified: list[SyntheticSample] = []
+        for _, items in sorted(by_lang.items()):
+            stratified.extend(items[:samples_per_lang])
+        return stratified
