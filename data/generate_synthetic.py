@@ -297,3 +297,22 @@ class CrossLingualSynthesizer:
         for _, items in sorted(by_lang.items()):
             stratified.extend(items[:samples_per_lang])
         return stratified
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Indic LLM Synthetic Data Generation")
+    parser.add_argument("--count", type=int, default=10, help="Number of samples to generate")
+    parser.add_argument("--languages", nargs="+", default=["hi", "bn", "ta", "te"], help="Target languages")
+    parser.add_argument("--output", type=str, default="data/synthetic_samples.jsonl", help="Output JSONL path")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    args = parser.parse_args()
+
+    generator = SyntheticDataGenerator(seed=args.seed)
+    samples = generator.generate_batch(count=args.count, target_languages=args.languages)
+    samples = generator.deduplicate(samples)
+    written = generator.export_jsonl(samples, args.output)
+    print(f"Generated {written} high-quality synthetic samples written to {args.output}")
+
+
+if __name__ == "__main__":
+    main()
