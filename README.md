@@ -351,3 +351,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, coding stan
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+
+### 6. Synthetic Instruction Evolution (Evol-Instruct)
+Synthesize culturally relevant, multi-step instruction-response pairs for Indic languages:
+```bash
+python data/generate_synthetic.py --count 50 --languages hi bn ta te --output data/synthetic_samples.jsonl
+```
