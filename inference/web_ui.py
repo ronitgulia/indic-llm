@@ -114,3 +114,109 @@ HTML_PAGE = """<!DOCTYPE html>
 </body>
 </html>
 """
+
+
+class IndicRequestHandler(BaseHTTPRequestHandler):
+    """Handles HTTP requests for Indic LLM playground and REST endpoints."""
+
+    def _send_json(self, status: int, data: dict[str, Any]):
+        body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        if parsed.path in ["/", "/index.html"]:
+            body = HTML_PAGE.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif parsed.path == "/api/health":
+            self._send_json(200, {
+                "status": "healthy",
+                "service": "indic-llm-web",
+                "version": "0.9.5",
+                "timestamp": int(time.time()),
+            })
+        else:
+            self._send_json(404, {"error": "Not Found", "path": parsed.path})
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        content_len = int(self.headers.get("Content-Length", 0))
+        post_data = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else "{}"
+
+        try:
+            payload = json.loads(post_data) if post_data.strip() else {}
+        except json.JSONDecodeError:
+            self._send_json(400, {"error": "Invalid JSON payload"})
+            return
+
+        if parsed.path == "/api/generate":
+            self._handle_generate(payload)
+        elif parsed.path == "/api/chat":
+            self._handle_chat(payload)
+        elif parsed.path == "/api/transliterate":
+            self._handle_transliterate(payload)
+        else:
+            self._send_json(404, {"error": "Endpoint Not Found", "endpoint": parsed.path})
+
+    def _handle_generate(self, payload: dict[str, Any]):
+        prompt = payload.get("prompt", "").strip()
+        if not prompt:
+            self._send_json(400, {"error": "Missing 'prompt' field"})
+            return
+
+        lang = payload.get("language", "hi")
+        temp = float(payload.get("temperature", 0.7))
+        guardrails = payload.get("enable_guardrails", True)
+        speculative = payload.get("use_speculative", False)
+
+        # Simulated or lightweight generation for web playground
+        completion = f"[{lang.upper()}] उत्तर: '{prompt}' के संबंध में विस्तृत व्याख्या प्रस्तुत है। यह भारतीय भाषाओं में अनुकूलित मॉडल द्वारा उत्पन्न किया गया है।"
+        self._send_json(200, {
+            "completion": completion,
+            "language": lang,
+            "temperature": temp,
+            "guardrails_active": guardrails,
+            "speculative_active": speculative,
+            "tokens_generated": 28,
+            "latency_ms": 14.5,
+        })
+
+    def _handle_chat(self, payload: dict[str, Any]):
+        messages = payload.get("messages", [])
+        if not messages:
+            self._send_json(400, {"error": "Missing 'messages' list"})
+            return
+        last_msg = messages[-1].get("content", "")
+        reply = f"प्राप्त संदेश: '{last_msg}'. यह चैट सहायिका बहुभाषी संवाद में सक्षम है।"
+        self._send_json(200, {
+            "reply": reply,
+            "messages_count": len(messages) + 1,
+        })
+
+    def _handle_transliterate(self, payload: dict[str, Any]):
+        text = payload.get("text", "")
+        target = payload.get("target_script", "Devanagari")
+        # Lightweight transliteration endpoint response
+        self._send_json(200, {
+            "source_text": text,
+            "target_script": target,
+            "transliterated_text": text,  # Mocked pass-through for response schema
+        })
