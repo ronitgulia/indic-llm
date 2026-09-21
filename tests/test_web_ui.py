@@ -61,3 +61,13 @@ def test_not_found_endpoint():
     handler = _make_handler("GET", "/api/unknown")
     handler.do_GET()
     handler.send_response.assert_called_with(404)
+
+
+def test_chat_endpoint():
+    payload = {"messages": [{"role": "user", "content": "नमस्ते"}]}
+    handler = _make_handler("POST", "/api/chat", payload)
+    handler.do_POST()
+    handler.send_response.assert_called_with(200)
+    output = json.loads(handler.wfile.getvalue().decode("utf-8"))
+    assert "reply" in output
+    assert output["messages_count"] == 2
