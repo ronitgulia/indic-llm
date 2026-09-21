@@ -220,3 +220,14 @@ class IndicRequestHandler(BaseHTTPRequestHandler):
             "target_script": target,
             "transliterated_text": text,  # Mocked pass-through for response schema
         })
+
+
+def run_server(host: str = "0.0.0.0", port: int = 8000):
+    server_address = (host, port)
+    httpd = HTTPServer(server_address, IndicRequestHandler)
+    print(f"Starting Indic LLM Web UI on http://{host}:{port}")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down web server...")
+        httpd.server_close()
