@@ -231,3 +231,15 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
     except KeyboardInterrupt:
         print("\nShutting down web server...")
         httpd.server_close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Indic LLM Web UI Server")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host interface to bind")
+    parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
+    args = parser.parse_args()
+    run_server(host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()
