@@ -71,3 +71,12 @@ def test_chat_endpoint():
     output = json.loads(handler.wfile.getvalue().decode("utf-8"))
     assert "reply" in output
     assert output["messages_count"] == 2
+
+
+def test_transliterate_endpoint():
+    payload = {"text": "namaste", "target_script": "Devanagari"}
+    handler = _make_handler("POST", "/api/transliterate", payload)
+    handler.do_POST()
+    handler.send_response.assert_called_with(200)
+    output = json.loads(handler.wfile.getvalue().decode("utf-8"))
+    assert output["target_script"] == "Devanagari"
