@@ -1,0 +1,22 @@
+# Git & VCS
+.git
+.github
+.gitignore
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Data & large binaries
+checkpoints/*.pt
+checkpoints/*.bin
+*.onnx
+data/raw/
