@@ -243,3 +243,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Standardized error code mapping
+ERROR_CODES = {
+    400: "BAD_REQUEST",
+    404: "RESOURCE_NOT_FOUND",
+    500: "INTERNAL_SERVER_ERROR",
+}
