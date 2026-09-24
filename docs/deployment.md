@@ -12,3 +12,20 @@ Visit `http://localhost:8000` in your web browser.
 - `POST /api/generate` — Text generation with safety and speculative decoding controls.
 - `POST /api/chat` — Multi-turn conversation completion.
 - `POST /api/transliterate` — Script conversion across Indic scripts.
+
+
+## 3. Docker Deployment
+### Build and Run with Docker:
+```bash
+docker build -t indic-llm:latest -f docker/Dockerfile .
+docker run -p 8000:8000 indic-llm:latest
+```
+
+### Launch with Docker Compose:
+```bash
+docker-compose up -d
+```
+Check service logs:
+```bash
+docker-compose logs -f
+```
