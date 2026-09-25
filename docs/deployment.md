@@ -29,3 +29,15 @@ Check service logs:
 ```bash
 docker-compose logs -f
 ```
+
+
+## 4. Python Client SDK
+Use `IndicLLMClient` to interact with a running server programmatically:
+```python
+from inference.client import IndicLLMClient
+
+client = IndicLLMClient("http://localhost:8000")
+print(client.health())
+response = client.generate("भारत के प्रमुख त्यौहार कौन से हैं?", language="hi")
+print(response["completion"])
+```
