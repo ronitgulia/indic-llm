@@ -250,3 +250,13 @@ ERROR_CODES = {
     404: "RESOURCE_NOT_FOUND",
     500: "INTERNAL_SERVER_ERROR",
 }
+
+# Frontend script auto-detection metadata
+SUPPORTED_SCRIPTS_MAP = {
+    "hi": "Devanagari",
+    "bn": "Bengali",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "gu": "Gujarati",
+    "mr": "Devanagari",
+}
