@@ -358,3 +358,15 @@ Synthesize culturally relevant, multi-step instruction-response pairs for Indic 
 ```bash
 python data/generate_synthetic.py --count 50 --languages hi bn ta te --output data/synthetic_samples.jsonl
 ```
+
+
+### 7. Web UI & Docker Deployment
+Launch the interactive web playground:
+```bash
+# Direct Python server
+python inference/web_ui.py --port 8000
+
+# Or via Docker Compose
+docker-compose up -d
+```
+Access the UI at `http://localhost:8000`.
