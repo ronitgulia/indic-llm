@@ -152,3 +152,34 @@ def compute_chrf(
         total_char_f += f
 
     return round((total_char_f / len(hypotheses)) * 100.0, 2)
+
+
+class IndicReasoningBenchmark:
+    """Evaluates multi-step Indic mathematical and logical reasoning tasks."""
+
+    def __init__(self, tasks_file: str | Path | None = None):
+        self.tasks_file = Path(tasks_file) if tasks_file else None
+
+    def evaluate_predictions(
+        self,
+        predictions: list[dict[str, Any]],
+    ) -> MetricResult:
+        """Evaluate accuracy of step-by-step reasoning outputs."""
+        if not predictions:
+            return MetricResult("indic_reasoning_acc", 0.0, 0, {})
+
+        correct = 0
+        total = len(predictions)
+        for item in predictions:
+            pred_ans = str(item.get("predicted_answer", "")).strip().lower()
+            gold_ans = str(item.get("ground_truth", "")).strip().lower()
+            if pred_ans == gold_ans or gold_ans in pred_ans:
+                correct += 1
+
+        acc = round((correct / total) * 100.0, 2)
+        return MetricResult(
+            metric_name="indic_reasoning_acc",
+            score=acc,
+            num_samples=total,
+            metadata={"correct": correct, "total": total},
+        )
