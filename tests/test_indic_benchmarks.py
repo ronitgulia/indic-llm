@@ -31,3 +31,32 @@ def test_compute_chrf():
     refs = [["सौर ऊर्जा पर्यावरण के अनुकूल है।"]]
     score = compute_chrf(hyps, refs)
     assert score >= 99.0
+
+
+def test_reasoning_benchmark():
+    from eval.indic_benchmarks import IndicReasoningBenchmark
+    bench = IndicReasoningBenchmark()
+    preds = [
+        {"predicted_answer": "9 सेब बचे", "ground_truth": "9"},
+        {"predicted_answer": "6", "ground_truth": "6"},
+        {"predicted_answer": "गलत उत्तर", "ground_truth": "17"},
+    ]
+    res = bench.evaluate_predictions(preds)
+    assert res.score == pytest.approx(66.67, 0.1)
+    assert res.num_samples == 3
+
+
+def test_transliteration_accuracy():
+    from eval.indic_benchmarks import TransliterationAccuracyMetric
+    hyps = ["नमस्ते", "भारत", "गलत"]
+    refs = ["नमस्ते", "भारत", "सही"]
+    acc = TransliterationAccuracyMetric.compute_accuracy(hyps, refs)
+    assert acc == pytest.approx(66.67, 0.1)
+
+
+def test_cross_lingual_transfer():
+    from eval.indic_benchmarks import CrossLingualTransferScore
+    src = [80.0, 90.0]
+    tgt = [72.0, 81.0]
+    parity = CrossLingualTransferScore.compute_parity(src, tgt)
+    assert parity == 90.0
