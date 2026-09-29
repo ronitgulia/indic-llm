@@ -183,3 +183,32 @@ class IndicReasoningBenchmark:
             num_samples=total,
             metadata={"correct": correct, "total": total},
         )
+
+
+class TransliterationAccuracyMetric:
+    """Measures character-level and token-level transliteration fidelity."""
+
+    @staticmethod
+    def compute_accuracy(hypotheses: list[str], references: list[str]) -> float:
+        if not hypotheses or not references or len(hypotheses) != len(references):
+            return 0.0
+
+        matches = 0
+        for h, r in zip(hypotheses, references):
+            if h.strip() == r.strip():
+                matches += 1
+        return round((matches / len(hypotheses)) * 100.0, 2)
+
+
+class CrossLingualTransferScore:
+    """Measures performance parity between English source queries and Indic translated queries."""
+
+    @staticmethod
+    def compute_parity(source_scores: list[float], target_scores: list[float]) -> float:
+        if not source_scores or not target_scores or len(source_scores) != len(target_scores):
+            return 0.0
+        avg_src = sum(source_scores) / len(source_scores)
+        avg_tgt = sum(target_scores) / len(target_scores)
+        if avg_src == 0.0:
+            return 0.0
+        return round(min(1.0, avg_tgt / avg_src) * 100.0, 2)
