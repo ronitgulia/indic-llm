@@ -7,7 +7,6 @@ step-by-step reasoning, cross-lingual transfer, and script transliteration fidel
 from __future__ import annotations
 
 import collections
-import json
 import math
 import re
 from dataclasses import asdict, dataclass
@@ -29,7 +28,7 @@ class MetricResult:
 
 def tokenize_indic(text: str) -> list[str]:
     """Tokenize Indic text preserving punctuation and Unicode characters."""
-    return [w for w in re.findall(r"\w+|[^\w\s]", text, re.UNICODE) if w.strip()]
+    return [w for w in re.findall(r"[\w\u0900-\u0D7F]+|[^\w\s]", text) if w.strip()]
 
 
 def compute_bleu(

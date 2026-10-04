@@ -11,7 +11,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 
@@ -21,9 +20,9 @@ if sys_path not in sys.path:
     sys.path.insert(0, sys_path)
 
 try:
-    from model import IndicLLM, ModelConfig
+    from model import IndicLLM
 except ImportError:
-    from src.model import IndicLLM, ModelConfig  # type: ignore[no-redef]
+    from src.model import IndicLLM  # type: ignore[no-redef]
 
 log = logging.getLogger("export_onnx")
 

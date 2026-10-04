@@ -11,16 +11,13 @@ import sys
 from pathlib import Path
 from typing import List
 
-import pytest
 import torch
-import torch.nn.functional as F
 
 repo_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(repo_root))
 sys.path.insert(0, str(repo_root / "src"))
 sys.path.insert(0, str(repo_root / "inference"))
 
-from model import IndicLLM, ModelConfig  # noqa: E402
 from speculative import (  # noqa: E402
     SpeculativeConfig,
     SpeculativeEngine,
@@ -29,6 +26,8 @@ from speculative import (  # noqa: E402
     sample_token,
     speculative_step,
 )
+
+from model import IndicLLM, ModelConfig  # noqa: E402
 
 
 def test_speculative_sampling_perfect_match():

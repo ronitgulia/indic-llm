@@ -3,6 +3,7 @@
 import json
 from io import BytesIO
 from unittest.mock import MagicMock
+
 from inference.web_ui import IndicRequestHandler
 
 

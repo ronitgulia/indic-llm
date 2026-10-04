@@ -184,8 +184,7 @@ class SyntheticDataGenerator:
 
             # Adapt response with step explanation if needed
             if mutation == "increase_reasoning_steps":
-                resp = f"1. प्राथमिक विश्लेषण: {resp} 
-2. निष्कर्ष: उपर्युक्त बिंदुओं के आधार पर यह स्पष्ट है।"
+                resp = f"1. प्राथमिक विश्लेषण: {resp} \\n2. निष्कर्ष: उपर्युक्त बिंदुओं के आधार पर यह स्पष्ट है।"
 
             is_valid, reason = self.filter_quality(mutated_inst, resp)
             if not is_valid:
@@ -297,6 +296,9 @@ class CrossLingualSynthesizer:
         for _, items in sorted(by_lang.items()):
             stratified.extend(items[:samples_per_lang])
         return stratified
+
+
+SyntheticDataGenerator.stratified_sample = CrossLingualSynthesizer.stratified_sample
 
 
 def main():

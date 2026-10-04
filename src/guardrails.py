@@ -10,15 +10,11 @@ Comprehensive multi-tier safety engine tuned for Indic languages:
 
 from __future__ import annotations
 
-import argparse
 import logging
-import os
 import re
-import sys
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 logging.basicConfig(
     level=logging.INFO,
@@ -224,3 +220,10 @@ class IndicGuardrails:
             pii_redacted=pii_matches,
             toxicity_score=tox_score,
         )
+
+    def check_text(self, text: str) -> GuardrailResult:
+        """Alias for process_input evaluating safety of candidate text."""
+        return self.process_input(text)
+
+
+IndicSafetyFilter = IndicGuardrails

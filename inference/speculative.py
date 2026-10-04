@@ -14,12 +14,11 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import sentencepiece as spm
 import torch
@@ -48,7 +47,7 @@ class SpeculativeConfig:
     draft_steps: int = 4
     temperature: float = 0.7
     top_p: float = 0.9
-    max_new_tokens: 150
+    max_new_tokens: int = 150
     stop_sequences: List[str] = field(default_factory=list)
 
 

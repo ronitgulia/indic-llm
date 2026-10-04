@@ -1,6 +1,7 @@
 """Unit tests for IndicLLMClient SDK."""
 
 from unittest.mock import MagicMock, patch
+
 from inference.client import IndicLLMClient
 
 
@@ -19,7 +20,7 @@ def test_client_health(mock_urlopen):
 @patch("urllib.request.urlopen")
 def test_client_generate(mock_urlopen):
     mock_resp = MagicMock()
-    mock_resp.read.return_value = b'{"completion": "उत्तर", "language": "hi"}'
+    mock_resp.read.return_value = '{"completion": "उत्तर", "language": "hi"}'.encode("utf-8")
     mock_resp.__enter__.return_value = mock_resp
     mock_urlopen.return_value = mock_resp
 

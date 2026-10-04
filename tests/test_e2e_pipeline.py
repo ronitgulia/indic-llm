@@ -1,10 +1,8 @@
 """End-to-End integration test covering full Indic LLM pipeline."""
 
-import pytest
+from eval.indic_benchmarks import compute_bleu, compute_chrf
 from src.guardrails import IndicSafetyFilter
 from src.transliterate import IndicTransliterator
-from eval.indic_benchmarks import compute_bleu, compute_chrf
-from inference.web_ui import IndicRequestHandler
 
 
 def test_full_indic_pipeline():

@@ -12,11 +12,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-import re
-import sys
 from enum import Enum
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Tuple
 
 logging.basicConfig(
     level=logging.INFO,
@@ -96,17 +93,17 @@ def roman_to_devanagari(text: str) -> str:
 
         while idx < w_len:
             matched = False
-            for l in (3, 2, 1):
-                sub = clean_w[idx : idx + l]
+            for ngram_len in (3, 2, 1):
+                sub = clean_w[idx : idx + ngram_len]
                 if is_first and sub in ROMAN_INITIAL_VOWELS:
                     res += ROMAN_INITIAL_VOWELS[sub]
-                    idx += l
+                    idx += ngram_len
                     matched = True
                     is_first = False
                     break
                 elif sub in ROMAN_TO_DEV_MAP:
                     res += ROMAN_TO_DEV_MAP[sub]
-                    idx += l
+                    idx += ngram_len
                     matched = True
                     is_first = False
                     break
@@ -150,6 +147,33 @@ def devanagari_to_script(text: str, target_script: ScriptType) -> str:
             converted.append(ch)
 
     return "".join(converted)
+
+
+class IndicTransliterator:
+    """High-level transliteration interface for Indic and Latin scripts."""
+
+    def transliterate(self, text: str, source_script: str = "Latin", target_script: str = "Devanagari") -> str:
+        """Transliterate text between Romanized Latin and target Indic scripts."""
+        src_lower = source_script.lower()
+        tgt_lower = target_script.lower()
+
+        if src_lower in ("latin", "roman"):
+            dev = roman_to_devanagari(text)
+            if tgt_lower in ("devanagari", "hindi", "marathi"):
+                return dev
+            for st in ScriptType:
+                if st.value.lower() == tgt_lower:
+                    return devanagari_to_script(dev, st)
+            return dev
+
+        if tgt_lower in ("devanagari", "hindi", "marathi"):
+            return text
+
+        for st in ScriptType:
+            if st.value.lower() == tgt_lower:
+                return devanagari_to_script(text, st)
+
+        return text
 
 
 def main() -> None:

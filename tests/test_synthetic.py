@@ -1,7 +1,11 @@
 """Unit tests for Indic Synthetic Instruction Generator and Mutator."""
 
-import pytest
-from data.generate_synthetic import InstructionMutator, SyntheticSample
+from data.generate_synthetic import (
+    CrossLingualSynthesizer,
+    InstructionMutator,
+    SyntheticDataGenerator,
+    SyntheticSample,
+)
 
 
 def test_synthetic_sample_dataclass():
@@ -100,7 +104,6 @@ def test_jsonl_export_import(tmp_path):
 
 
 def test_cross_lingual_synthesizer():
-    from data.generate_synthetic import CrossLingualSynthesizer
     syn = CrossLingualSynthesizer(seed=42)
     en_q = "Explain how neural network optimization uses gradient descent."
     en_orig, hi_synth = syn.synthesize_pair(en_q, domain="machine_learning")
