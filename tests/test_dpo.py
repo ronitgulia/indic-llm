@@ -58,6 +58,84 @@ def test_compute_sequence_logps():
     assert (logps < 0.0).all()
 
 
+class MockTokenizer:
+    """Deterministic lightweight tokenizer for testing DPO without external files."""
+
+    def __init__(self, vocab_size: int = 100):
+        self._vocab_size = vocab_size
+
+    def encode(self, text: str, out_type: type = int) -> list[int]:
+        tokens = [abs(hash(tok)) % (self._vocab_size - 4) + 4 for tok in text.split()]
+        return tokens or [4]
+
+    def eos_id(self) -> int:
+        return 2
+
+    def pad_id(self) -> int:
+        return 0
+
+    def bos_id(self) -> int:
+        return 1
+
+
+def test_preference_dataset_mock_tokenizer(tmp_path: Path):
+    tok = MockTokenizer()
+    data_file = tmp_path / "pref_mock.jsonl"
+    records = [
+        {
+            "prompt": "भारत का राष्ट्रीय पक्षी क्या है?",
+            "chosen": "भारत का राष्ट्रीय पक्षी मोर है।",
+            "rejected": "मुझे नहीं पता।",
+        },
+        {
+            "instruction": "सूर्य किस दिशा से उगता है?",
+            "response_chosen": [{"role": "assistant", "content": "पूर्व दिशा से।"}],
+            "response_rejected": [{"role": "assistant", "content": "पश्चिम दिशा से।"}],
+        },
+    ]
+    with open(data_file, "w", encoding="utf-8") as f:
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+    ds = PreferenceDataset(str(data_file), tokenizer=tok, max_seq_len=32)
+    assert len(ds) == 2
+
+    c_in, c_tgt, r_in, r_tgt = ds[0]
+    assert c_in.shape == (32,)
+    assert c_tgt.shape == (32,)
+    assert r_in.shape == (32,)
+    assert r_tgt.shape == (32,)
+
+    # Prompt masked
+    assert c_tgt[0].item() == IGNORE_INDEX
+    # Unmasked response tokens exist
+    assert (c_tgt != IGNORE_INDEX).sum() > 0
+    assert (r_tgt != IGNORE_INDEX).sum() > 0
+
+
+def test_preference_dataset_long_prompt_preserves_response(tmp_path: Path):
+    tok = MockTokenizer()
+    data_file = tmp_path / "pref_long.jsonl"
+    # Prompt with 50 words on max_seq_len=16
+    records = [
+        {
+            "prompt": "बहुत " * 50 + "लंबा प्रश्न है यह बताएं?",
+            "chosen": "यह एक संक्षिप्त उत्तर है।",
+            "rejected": "गलत उत्तर।",
+        }
+    ]
+    with open(data_file, "w", encoding="utf-8") as f:
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+    ds = PreferenceDataset(str(data_file), tokenizer=tok, max_seq_len=16)
+    c_in, c_tgt, r_in, r_tgt = ds[0]
+
+    # Must preserve response tokens rather than completely masking targets with -100
+    assert (c_tgt != IGNORE_INDEX).sum() > 0
+    assert (r_tgt != IGNORE_INDEX).sum() > 0
+
+
 @pytest.mark.skipif(not os.path.exists(MODEL_PATH), reason="Tokenizer model not found on disk")
 def test_preference_dataset(tmp_path: Path):
     import sentencepiece as spm

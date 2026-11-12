@@ -92,11 +92,28 @@ class PreferenceDataset(Dataset):
                     continue
                 try:
                     obj = json.loads(line)
-                    prompt = obj.get("prompt") or obj.get("instruction") or ""
-                    chosen = obj.get("chosen") or obj.get("accepted") or ""
-                    rejected = obj.get("rejected") or ""
+                    prompt = obj.get("prompt") or obj.get("instruction") or obj.get("question") or ""
+                    chosen = obj.get("chosen") or obj.get("accepted") or obj.get("response_chosen") or ""
+                    rejected = (
+                        obj.get("rejected")
+                        or obj.get("rejected_response")
+                        or obj.get("response_rejected")
+                        or ""
+                    )
+
+                    # Extract text content if given as structured message dicts or lists
+                    if isinstance(chosen, dict):
+                        chosen = chosen.get("content", "")
+                    elif isinstance(chosen, list) and chosen:
+                        chosen = chosen[-1].get("content", "") if isinstance(chosen[-1], dict) else str(chosen[-1])
+
+                    if isinstance(rejected, dict):
+                        rejected = rejected.get("content", "")
+                    elif isinstance(rejected, list) and rejected:
+                        rejected = rejected[-1].get("content", "") if isinstance(rejected[-1], dict) else str(rejected[-1])
+
                     if prompt and chosen and rejected:
-                        self.samples.append((prompt.strip(), chosen.strip(), rejected.strip()))
+                        self.samples.append((str(prompt).strip(), str(chosen).strip(), str(rejected).strip()))
                 except Exception:
                     continue
 
@@ -111,12 +128,27 @@ class PreferenceDataset(Dataset):
         self, prompt: str, response: str
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         prompt_str = f"[INST] {prompt} [/INST] "
-        prompt_ids = self.tokenizer.encode(prompt_str, out_type=int)
-        resp_ids = self.tokenizer.encode(response, out_type=int)
+        try:
+            prompt_ids = self.tokenizer.encode(prompt_str, out_type=int)
+            resp_ids = self.tokenizer.encode(response, out_type=int)
+        except TypeError:
+            # Fallback for mock tokenizers that don't take out_type
+            prompt_ids = self.tokenizer.encode(prompt_str)
+            resp_ids = self.tokenizer.encode(response)
 
-        eos_id = self.tokenizer.eos_id()
-        if eos_id >= 0:
+        eos_id = self.tokenizer.eos_id() if hasattr(self.tokenizer, "eos_id") else -1
+        if eos_id is not None and eos_id >= 0:
             resp_ids.append(eos_id)
+
+        # Ensure response tokens are preserved by truncating prompt from left if necessary
+        if len(prompt_ids) + len(resp_ids) > self.max_seq_len + 1:
+            max_prompt_len = (self.max_seq_len + 1) - len(resp_ids)
+            if max_prompt_len < 1:
+                # If response itself is large, allocate half seq_len to prompt and half to response
+                prompt_ids = prompt_ids[-(self.max_seq_len // 2):]
+                resp_ids = resp_ids[: (self.max_seq_len + 1 - len(prompt_ids))]
+            else:
+                prompt_ids = prompt_ids[-max_prompt_len:]
 
         full_ids = prompt_ids + resp_ids
         prompt_len = len(prompt_ids)
@@ -136,7 +168,7 @@ class PreferenceDataset(Dataset):
         ]
 
         # Pad to max_seq_len
-        pad_id = self.tokenizer.pad_id() if self.tokenizer.pad_id() >= 0 else 0
+        pad_id = self.tokenizer.pad_id() if hasattr(self.tokenizer, "pad_id") and self.tokenizer.pad_id() >= 0 else 0
         pad_len = self.max_seq_len - len(inputs)
         if pad_len > 0:
             inputs = inputs + [pad_id] * pad_len
