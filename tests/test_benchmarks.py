@@ -27,6 +27,34 @@ def test_bleu_identical_strings():
         assert p > 0.99
 
 
+def test_bleu_short_identical_strings():
+    # 2-word identical strings should not collapse to 0.0 due to max_order=4
+    refs = ["नमस्ते भारत"]
+    hyps = ["नमस्ते भारत"]
+    result = compute_bleu(refs, hyps)
+
+    assert result["bleu"] > 0.99
+    assert result["brevity_penalty"] == 1.0
+    assert len(result["precisions"]) == 2
+    for p in result["precisions"]:
+        assert p > 0.99
+
+
+def test_bleu_single_token():
+    refs = ["नमस्ते"]
+    hyps = ["नमस्ते"]
+    result = compute_bleu(refs, hyps)
+
+    assert result["bleu"] == 1.0
+    assert result["precisions"] == [1.0]
+
+
+def test_bleu_empty_inputs():
+    result = compute_bleu([], [])
+    assert result["bleu"] == 0.0
+    assert result["hyp_len"] == 0
+
+
 def test_bleu_disjoint_strings():
     refs = ["सूरज पूरब में उगता है"]
     hyps = ["चांद रात को चमकता है"]

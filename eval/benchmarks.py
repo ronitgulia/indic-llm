@@ -76,9 +76,12 @@ def compute_bleu(
 
             possible_by_order[n - 1] += max(0, len(hyp_tokens) - n + 1)
 
+    # Effective maximum n-gram order based on generated hypothesis length
+    eff_order = max(1, min(max_order, hyp_length)) if hyp_length > 0 else max_order
+
     # Modified precisions per order
     precisions: List[float] = []
-    for n in range(max_order):
+    for n in range(eff_order):
         if possible_by_order[n] == 0:
             precisions.append(0.0)
         elif smooth:
@@ -89,8 +92,8 @@ def compute_bleu(
             precisions.append(matches_by_order[n] / possible_by_order[n])
 
     # Geometric mean of precisions (in log space to avoid underflow)
-    if min(precisions) > 0:
-        log_avg = sum(math.log(p) for p in precisions) / max_order
+    if precisions and min(precisions) > 0:
+        log_avg = sum(math.log(p) for p in precisions) / len(precisions)
         geo_mean = math.exp(log_avg)
     else:
         geo_mean = 0.0
