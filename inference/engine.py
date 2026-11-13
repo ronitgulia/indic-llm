@@ -122,30 +122,37 @@ class InferenceEngine:
                     else:
                         curr_logits[0, tid] *= cfg.repetition_penalty
 
-            # Temperature
-            scaled_logits = curr_logits / max(cfg.temperature, 1e-8)
+            # Greedy vs sampling decoding
+            if cfg.temperature <= 1e-5:
+                next_token_id = int(torch.argmax(curr_logits, dim=-1).item())
+                next_token_tensor = torch.tensor([[next_token_id]], dtype=torch.long, device=self.device)
+            else:
+                # Temperature
+                scaled_logits = curr_logits / max(cfg.temperature, 1e-8)
 
-            # Top-K filtering
-            if cfg.top_k > 0:
-                topk_vals, _ = torch.topk(
-                    scaled_logits, min(cfg.top_k, scaled_logits.shape[-1])
-                )
-                scaled_logits[scaled_logits < topk_vals[:, [-1]]] = float("-inf")
+                # Top-K filtering
+                if cfg.top_k > 0:
+                    topk_vals, _ = torch.topk(
+                        scaled_logits, min(cfg.top_k, scaled_logits.shape[-1])
+                    )
+                    scaled_logits[scaled_logits < topk_vals[:, [-1]]] = float("-inf")
 
-            # Top-P (nucleus) filtering
-            if cfg.top_p < 1.0:
-                sorted_logits, sorted_indices = torch.sort(scaled_logits, descending=True)
-                cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-                sorted_indices_to_remove = cumulative_probs - F.softmax(sorted_logits, dim=-1) > cfg.top_p
-                sorted_logits[sorted_indices_to_remove] = float("-inf")
-                scaled_logits = torch.zeros_like(scaled_logits).scatter_(
-                    1, sorted_indices, sorted_logits
-                )
+                # Top-P (nucleus) filtering
+                if cfg.top_p < 1.0:
+                    sorted_logits, sorted_indices = torch.sort(scaled_logits, descending=True)
+                    cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+                    sorted_indices_to_remove = cumulative_probs > cfg.top_p
+                    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+                    sorted_indices_to_remove[..., 0] = False
+                    indices_to_remove = sorted_indices_to_remove.scatter(
+                        1, sorted_indices, sorted_indices_to_remove
+                    )
+                    scaled_logits[indices_to_remove] = float("-inf")
 
-            # Sample next token
-            probs = F.softmax(scaled_logits, dim=-1)
-            next_token_tensor = torch.multinomial(probs, num_samples=1)
-            next_token_id = next_token_tensor.item()
+                # Sample next token
+                probs = F.softmax(scaled_logits, dim=-1)
+                next_token_tensor = torch.multinomial(probs, num_samples=1)
+                next_token_id = next_token_tensor.item()
 
             if next_token_id == eos_id:
                 break
@@ -171,8 +178,9 @@ class InferenceEngine:
             yield token_str, tok_per_sec
 
             # Advance KV-cache by feeding ONLY the newly sampled token
-            logits, _ = self.model(next_token_tensor, start_pos=prompt_len + step)
-            curr_logits = logits[:, -1, :].clone()
+            if step < cfg.max_new_tokens - 1 and prompt_len + step + 1 < self.model.config.max_seq_len:
+                logits, _ = self.model(next_token_tensor, start_pos=prompt_len + step)
+                curr_logits = logits[:, -1, :].clone()
 
     def generate(
         self,
@@ -182,9 +190,16 @@ class InferenceEngine:
         """
         Run complete generation and return full generated string + throughput.
         """
+        cfg = config or GenerationConfig()
         chunks = []
         final_tok_per_sec = 0.0
-        for token_text, tok_s in self.generate_stream(prompt, config):
+        for token_text, tok_s in self.generate_stream(prompt, cfg):
             chunks.append(token_text)
             final_tok_per_sec = tok_s
-        return "".join(chunks), final_tok_per_sec
+        full_text = "".join(chunks)
+
+        for stop in cfg.stop_sequences:
+            if stop and stop in full_text:
+                full_text = full_text.split(stop, 1)[0]
+
+        return full_text, final_tok_per_sec

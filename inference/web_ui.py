@@ -150,7 +150,7 @@ class IndicRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, {
                 "status": "healthy",
                 "service": "indic-llm-web",
-                "version": "0.9.5",
+                "version": "1.0.0",
                 "timestamp": int(time.time()),
             })
         else:

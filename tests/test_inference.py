@@ -96,3 +96,21 @@ def test_inference_engine_generate_wrapper(tiny_model, mock_tokenizer):
     assert isinstance(text, str)
     assert len(text) > 0
     assert tok_s >= 0.0
+
+
+def test_inference_engine_greedy_decoding(tiny_model, mock_tokenizer):
+    engine = InferenceEngine(tiny_model, mock_tokenizer, device=torch.device("cpu"))
+    config = GenerationConfig(max_new_tokens=4, temperature=0.0)
+
+    tokens = [tok for tok, _ in engine.generate_stream("नमस्ते", config)]
+    assert len(tokens) == 4
+
+
+def test_inference_engine_stop_sequence_trimmed_in_generate(tiny_model, mock_tokenizer):
+    mock_tokenizer.decode.side_effect = ["नमस्ते ", "दुनिया ", "<|stop|>", "अतिरिक्त "]
+    engine = InferenceEngine(tiny_model, mock_tokenizer, device=torch.device("cpu"))
+    config = GenerationConfig(max_new_tokens=6, stop_sequences=["<|stop|>"])
+
+    text, _ = engine.generate("जांच", config)
+    assert "<|stop|>" not in text
+    assert "अतिरिक्त " not in text
