@@ -55,15 +55,22 @@ log = logging.getLogger(__name__)
 # Unicode ranges of interest
 # ---------------------------------------------------------------------------
 
-_DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
+# Indic Unicode blocks covering Devanagari, Bengali, Gurmukhi, Gujarati,
+# Oriya, Tamil, Telugu, Kannada, Malayalam, Vedic, and Devanagari Extended:
+_INDIC_RE = re.compile(r"[\u0900-\u0D7F\u1CD0-\u1CFF\uA8E0-\uA8FF]")
+_DEVANAGARI_RE = re.compile(r"[\u0900-\u097F\uA8E0-\uA8FF]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 
 # Allowed character classes in the output:
-#   Devanagari block  \u0900-\u097F
-#   Basic Latin       \u0020-\u007E   (printable ASCII)
+#   Indic block       \u0900-\u0D7F (Devanagari, Bengali, Tamil, Telugu, etc.)
+#   Vedic extensions  \u1CD0-\u1CFF
+#   Devanagari ext.   \uA8E0-\uA8FF
+#   Basic Latin       \u0020-\u007E (printable ASCII)
 #   Punctuation       various Unicode blocks kept via whitelist
 _NOISE_CHARS_RE = re.compile(
-    r"[^\u0900-\u097F"   # Devanagari
+    r"[^\u0900-\u0D7F"   # Indic: Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam
+    r"\u1CD0-\u1CFF"     # Vedic Extensions
+    r"\uA8E0-\uA8FF"     # Devanagari Extended
     r"\u0020-\u007E"     # Basic Latin (printable)
     r"\u00A0-\u00FF"     # Latin-1 supplement (accents etc.)
     r"\u2000-\u206F"     # General punctuation
@@ -103,15 +110,20 @@ def devanagari_char_count(text: str) -> int:
     return len(_DEVANAGARI_RE.findall(text))
 
 
+def indic_char_count(text: str) -> int:
+    """Return the number of Indic code points (Devanagari, Dravidian, Bengali, etc.) in *text*."""
+    return len(_INDIC_RE.findall(text))
+
+
 def script_ratio(text: str) -> Tuple[float, float]:
     """
-    Return (hindi_ratio, latin_ratio) as fractions of total non-space chars.
+    Return (indic_ratio, latin_ratio) as fractions of total non-space chars.
     """
     chars = [c for c in text if not c.isspace()]
     if not chars:
         return 0.0, 0.0
     n = len(chars)
-    h = sum(1 for c in chars if _DEVANAGARI_RE.match(c))
+    h = sum(1 for c in chars if _INDIC_RE.match(c))
     l_ = sum(1 for c in chars if _LATIN_RE.match(c))
     return h / n, l_ / n
 
@@ -156,7 +168,7 @@ class QualityFilter:
             return False
         if len(text) > self.cfg.max_chars:
             return False
-        if devanagari_char_count(text) < self.cfg.min_hindi_chars:
+        if indic_char_count(text) < self.cfg.min_hindi_chars:
             return False
 
         h_ratio, l_ratio = script_ratio(text)
@@ -284,22 +296,34 @@ def _extract_parallel(obj: dict) -> Optional[str]:
 
 def _extract_instruct(obj: dict) -> Optional[str]:
     """
-    Extract text from Indic-Instruct ``{"messages": [...]}`` records.
+    Extract text from Indic-Instruct records.
+    Supports both {"instruction": ..., "output": ...} / {"response": ...}
+    and {"messages": [{"role": "user"|"assistant", "content": "..."}]}.
     Returns a formatted [INST] ... [/INST] string.
     """
-    user_msg = ""
-    assistant_msg = ""
-    for msg in obj.get("messages", []):
-        role = msg.get("role", "")
-        content = msg.get("content", "").strip()
-        if role == "user":
-            user_msg = content
-        elif role == "assistant":
-            assistant_msg = content
+    # 1. Direct instruction/output schema
+    inst = obj.get("instruction") or obj.get("prompt")
+    out = obj.get("output") or obj.get("response") or obj.get("completion")
+    if inst and out:
+        return f"[INST] {str(inst).strip()} [/INST] {str(out).strip()}"
 
-    if not user_msg or not assistant_msg:
-        return None
-    return f"[INST] {user_msg} [/INST] {assistant_msg}"
+    # 2. Conversational messages schema
+    messages = obj.get("messages") or obj.get("conversations") or []
+    if messages:
+        user_msg = ""
+        assistant_msg = ""
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "").strip()
+            if role in ("user", "human"):
+                user_msg = content
+            elif role in ("assistant", "gpt", "bot"):
+                assistant_msg = content
+
+        if user_msg and assistant_msg:
+            return f"[INST] {user_msg} [/INST] {assistant_msg}"
+
+    return None
 
 
 _SCHEMA_EXTRACTORS = {
@@ -372,6 +396,7 @@ def clean_corpus(
                     hi_clean = cleaner.clean(normalize_unicode(tr.get("hi", "")))
                     en_text = tr.get("en", "").strip()
                     if hi_clean is None:
+                        cleaner.n_passed -= 1
                         continue
                     record = {"hi": hi_clean, "en": en_text}
                     # Undo double-count from second clean() call

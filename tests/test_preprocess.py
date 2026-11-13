@@ -20,6 +20,8 @@ from preprocess import (
     IndicTextCleaner,
     QualityConfig,
     QualityFilter,
+    _extract_instruct,
+    indic_char_count,
     normalize_unicode,
     script_ratio,
     strip_noise,
@@ -93,3 +95,37 @@ def test_cleaner_deduplication():
     res2 = cleaner.clean(sample)
     assert res2 is None
     assert cleaner.n_duplicate == 1
+
+
+def test_multilingual_indic_preservation():
+    # Bengali, Tamil, Telugu must not be stripped as noise
+    bengali = "গাছ পরিবেশের ভারসাম্য রক্ষা করে।"
+    tamil = "தண்ணீர் ஒரு விலைமதிப்பற்ற இயற்கை வளம்."
+    telugu = "వ్యాయామం యొక్క ప్రాముఖ్యత ఏమిటి?"
+
+    clean_bn = strip_noise(bengali)
+    clean_ta = strip_noise(tamil)
+    clean_te = strip_noise(telugu)
+
+    assert "গাছ" in clean_bn
+    assert "தண்ணீர்" in clean_ta
+    assert "వ్యాయామం" in clean_te
+
+    assert indic_char_count(bengali) > 10
+    assert indic_char_count(tamil) > 10
+    assert indic_char_count(telugu) > 10
+
+
+def test_extract_instruct_schemas():
+    # 1. Direct instruction/response
+    rec1 = {"instruction": "प्रश्न", "response": "उत्तर"}
+    assert _extract_instruct(rec1) == "[INST] प्रश्न [/INST] उत्तर"
+
+    # 2. Messages list
+    rec2 = {
+        "messages": [
+            {"role": "user", "content": "क्या हाल है?"},
+            {"role": "assistant", "content": "सब ठीक है।"},
+        ]
+    }
+    assert _extract_instruct(rec2) == "[INST] क्या हाल है? [/INST] सब ठीक है।"
