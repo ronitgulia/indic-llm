@@ -219,17 +219,31 @@ class InstructDataset(Dataset):
         log.info("Loaded %d instruction samples", len(self.examples))
 
     def _parse_record(self, obj: dict) -> Tuple[Optional[str], Optional[str]]:
-        if "instruction" in obj and "output" in obj:
-            return obj["instruction"].strip(), obj["output"].strip()
-        if "messages" in obj:
+        # 1. Direct instruction/output or instruction/response format (optionally with context input)
+        inst = obj.get("instruction") or obj.get("prompt")
+        out = obj.get("output") or obj.get("response") or obj.get("completion")
+        extra_input = obj.get("input", "")
+        if inst and out:
+            inst_str = str(inst).strip()
+            if extra_input and str(extra_input).strip():
+                inst_str = f"{inst_str}\n\n{str(extra_input).strip()}"
+            return inst_str, str(out).strip()
+
+        # 2. Conversational messages schema
+        if "messages" in obj or "conversations" in obj:
+            msgs = obj.get("messages") or obj.get("conversations") or []
             user_msg = None
             asst_msg = None
-            for m in obj["messages"]:
-                if m.get("role") == "user":
-                    user_msg = m.get("content", "").strip()
-                elif m.get("role") == "assistant":
-                    asst_msg = m.get("content", "").strip()
+            for m in msgs:
+                role = m.get("role", "")
+                content = m.get("content", "").strip()
+                if role in ("user", "human"):
+                    user_msg = content
+                elif role in ("assistant", "gpt", "bot"):
+                    asst_msg = content
             return user_msg, asst_msg
+
+        # 3. Formatted text string containing [INST] ... [/INST]
         if "text" in obj:
             text = obj["text"]
             if "[INST]" in text and "[/INST]" in text:
@@ -254,12 +268,28 @@ class InstructDataset(Dataset):
         else:
             prompt_str = f"[INST] {instruction} [/INST] "
 
-        prompt_ids = self.tokenizer.encode(prompt_str, out_type=int)
-        resp_ids = self.tokenizer.encode(output, out_type=int)
+        try:
+            prompt_ids = self.tokenizer.encode(prompt_str, out_type=int)
+            resp_ids = self.tokenizer.encode(output, out_type=int)
+        except TypeError:
+            # Fallback for mock tokenizers that don't take out_type
+            prompt_ids = self.tokenizer.encode(prompt_str)
+            resp_ids = self.tokenizer.encode(output)
 
-        eos_id = self.tokenizer.eos_id()
-        if eos_id >= 0:
+        eos_id = self.tokenizer.eos_id() if hasattr(self.tokenizer, "eos_id") else -1
+        if eos_id is not None and eos_id >= 0:
             resp_ids.append(eos_id)
+
+        # Truncate prompt from left if prompt + response exceeds max_seq_len + 1
+        # ensuring response tokens are preserved and not masked to 100% IGNORE_INDEX
+        if len(prompt_ids) + len(resp_ids) > self.max_seq_len + 1:
+            max_prompt_len = (self.max_seq_len + 1) - len(resp_ids)
+            if max_prompt_len < 1:
+                # If response itself is large, allocate half seq_len to prompt and half to response
+                prompt_ids = prompt_ids[-(self.max_seq_len // 2):]
+                resp_ids = resp_ids[: (self.max_seq_len + 1 - len(prompt_ids))]
+            else:
+                prompt_ids = prompt_ids[-max_prompt_len:]
 
         # Full sequence
         full_ids = prompt_ids + resp_ids
@@ -282,7 +312,7 @@ class InstructDataset(Dataset):
         ]
 
         # Pad to max_seq_len
-        pad_id = self.tokenizer.pad_id() if self.tokenizer.pad_id() >= 0 else 0
+        pad_id = self.tokenizer.pad_id() if hasattr(self.tokenizer, "pad_id") and self.tokenizer.pad_id() >= 0 else 0
         pad_len = self.max_seq_len - len(inputs)
         if pad_len > 0:
             inputs = inputs + [pad_id] * pad_len
